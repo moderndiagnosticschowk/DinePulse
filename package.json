@@ -1,0 +1,19 @@
+{
+  "name": "smart-restaurant-pos",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/web & npm run dev -w apps/api",
+    "build": "npm run build -w apps/web && npm run build -w apps/api",
+    "typecheck": "npm run typecheck -w apps/web && npm run typecheck -w apps/api",
+    "lint": "npm run lint -w apps/web && npm run lint -w apps/api",
+    "install:all": "npm install"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

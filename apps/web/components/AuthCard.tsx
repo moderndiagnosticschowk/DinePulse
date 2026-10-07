@@ -1,0 +1,3 @@
+export function AuthCard({ children, title, subtitle }: { children: React.ReactNode; title: string; subtitle: string }) {
+  return <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 px-4 py-10 text-slate-900"><div className="mx-auto flex min-h-[85vh] max-w-md items-center"><div className="w-full rounded-3xl bg-white p-7 shadow-2xl"><div className="mb-7"><div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-slate-900 font-bold text-white">SR</div><h1 className="text-2xl font-bold">{title}</h1><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div>{children}</div></div></main>;
+}

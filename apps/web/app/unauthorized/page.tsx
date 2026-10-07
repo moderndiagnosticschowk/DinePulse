@@ -1,0 +1,2 @@
+import Link from 'next/link';
+export default function Unauthorized(){return <main className="grid min-h-screen place-items-center p-6"><div className="max-w-md rounded-3xl bg-white p-8 text-center shadow"><h1 className="text-2xl font-bold">No active workspace access</h1><p className="mt-2 text-sm text-slate-500">Your account is signed in but does not have an active branch membership yet.</p><Link href="/login" className="mt-6 inline-block rounded-xl bg-slate-900 px-4 py-2.5 font-semibold text-white">Back to login</Link></div></main>}
