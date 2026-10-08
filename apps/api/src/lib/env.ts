@@ -6,6 +6,8 @@ const schema = z.object({
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   SUPABASE_URL: z.string().url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().email().default('onboarding@resend.dev'),
 });
 
 export const env = schema.parse(process.env);
