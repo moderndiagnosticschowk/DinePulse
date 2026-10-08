@@ -13,7 +13,8 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "zod": "^4.1.12",
-    "@supabase/supabase-js": "^2.76.1"
+    "@supabase/supabase-js": "^2.76.1",
+    "resend": "^6.32.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
