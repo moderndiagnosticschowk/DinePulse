@@ -18,17 +18,21 @@ body {
   color: var(--dp-ink);
   font-family: Arial, Helvetica, sans-serif;
   text-rendering: optimizeLegibility;
+  animation: dp-page-in .38s ease-out both;
 }
 
 button, input, select, textarea { font: inherit; }
 
-button, a {
-  -webkit-tap-highlight-color: transparent;
-}
+button, a { -webkit-tap-highlight-color: transparent; }
 
 ::selection {
   background: #0f172a;
   color: #fff;
+}
+
+@keyframes dp-page-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes dp-fade-up {
@@ -56,6 +60,11 @@ button, a {
   50% { opacity: .9; transform: scale(1.04); }
 }
 
+@keyframes dp-shimmer {
+  0%, 100% { background-position: 200% 0; }
+  50% { background-position: -50% 0; }
+}
+
 .dp-fade-up { animation: dp-fade-up .55s cubic-bezier(.22,1,.36,1) both; }
 .dp-fade-in { animation: dp-fade-in .45s ease-out both; }
 .dp-scale-in { animation: dp-scale-in .45s cubic-bezier(.22,1,.36,1) both; }
@@ -69,27 +78,14 @@ button, a {
 .dp-delay-5 { animation-delay: 360ms; }
 
 .dp-interactive {
-  transition:
-    transform .22s cubic-bezier(.22,1,.36,1),
-    box-shadow .22s ease,
-    border-color .22s ease,
-    background-color .22s ease,
-    color .22s ease;
+  transition: transform .22s cubic-bezier(.22,1,.36,1), box-shadow .22s ease, border-color .22s ease, background-color .22s ease, color .22s ease;
 }
 
-.dp-interactive:hover {
-  transform: translateY(-2px);
-}
-
-.dp-interactive:active {
-  transform: translateY(0) scale(.985);
-}
+.dp-interactive:hover { transform: translateY(-2px); }
+.dp-interactive:active { transform: translateY(0) scale(.985); }
 
 .dp-card {
-  transition:
-    transform .24s cubic-bezier(.22,1,.36,1),
-    box-shadow .24s ease,
-    border-color .24s ease;
+  transition: transform .24s cubic-bezier(.22,1,.36,1), box-shadow .24s ease, border-color .24s ease;
 }
 
 .dp-card:hover {
@@ -109,19 +105,12 @@ button, a {
   transition: transform .2s ease, background-color .2s ease, color .2s ease;
 }
 
-.dp-sidebar-link:hover {
-  transform: translateX(3px);
-}
+.dp-sidebar-link:hover { transform: translateX(3px); }
 
 .dp-shimmer {
   background: linear-gradient(110deg, rgba(255,255,255,.05) 30%, rgba(255,255,255,.16) 45%, rgba(255,255,255,.05) 60%);
   background-size: 200% 100%;
   animation: dp-shimmer 3.5s ease-in-out infinite;
-}
-
-@keyframes dp-shimmer {
-  0%, 100% { background-position: 200% 0; }
-  50% { background-position: -50% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
