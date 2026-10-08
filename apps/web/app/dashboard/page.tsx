@@ -8,7 +8,7 @@ import Link from 'next/link';
 
 type Me = { success: boolean; data: { user: { id: string; email?: string }; profile: { full_name: string|null }|null; memberships: Array<{ id:string; role:string; branches:{id:string;name:string;code:string|null;company_id:string} | null }> } };
 
-const nav=[['Dashboard','/dashboard'],['POS Billing','/pos'],['Tables','/tables'],['Orders','/orders'],['Kitchen','/kitchen'],['Menu','/menu'],['Inventory','#'],['Purchases','#'],['Suppliers','#'],['Customers','#'],['Staff','#'],['Expenses','#'],['Reports','#'],['Settings','#']];
+const nav=[['Dashboard','/dashboard'],['POS Billing','/pos'],['Tables','/tables'],['Orders','/orders'],['Kitchen','/kitchen'],['Menu','/menu'],['Inventory','/inventory'],['Purchases','/purchases'],['Suppliers','/suppliers'],['Customers','#'],['Staff','#'],['Expenses','#'],['Reports','#'],['Settings','#']];
 
 export default function DashboardPage(){
   const router=useRouter(); const [loading,setLoading]=useState(true); const [me,setMe]=useState<Me['data']|null>(null); const [error,setError]=useState('');
