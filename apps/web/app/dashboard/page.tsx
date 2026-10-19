@@ -63,13 +63,13 @@ export default function DashboardPage() {
           const [ordersResult, tablesResult, stockResult] = await Promise.all([
             supabase.from('orders').select('grand_total,status').eq('branch_id', branchId).gte('created_at', start.toISOString()).limit(1000),
             supabase.from('restaurant_tables').select('id').eq('branch_id', branchId).in('status', ['OCCUPIED', 'BILLING']),
-            supabase.from('inventory_items').select('id').eq('branch_id', branchId).eq('is_active', true).filter('current_stock', 'lte', 'minimum_stock'),
+            supabase.from('inventory_items').select('id,current_stock,minimum_stock').eq('branch_id', branchId).eq('is_active', true),
           ]);
           if (active) setStats({
             sales: (ordersResult.data ?? []).filter(order => order.status === 'PAID').reduce((sum, order) => sum + Number(order.grand_total), 0),
             orders: ordersResult.data?.length ?? 0,
             openTables: tablesResult.data?.length ?? 0,
-            lowStock: stockResult.data?.length ?? 0,
+            lowStock: (stockResult.data ?? []).filter(item => Number(item.current_stock) <= Number(item.minimum_stock)).length,
           });
         }
       } catch (e) {
