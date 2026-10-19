@@ -51,7 +51,7 @@ async function canManage(r: BranchRequest) {
 
 menuRouter.get('/categories', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     const supabase = createUserClient(r.accessToken);
     const { data, error } = await supabase.from('categories').select('*').eq('branch_id', r.branchId).order('sort_order').order('name');
     if (error) throw error;
@@ -61,7 +61,7 @@ menuRouter.get('/categories', async (req, res, next) => {
 
 menuRouter.post('/categories', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const body = categorySchema.parse(req.body);
     const supabase = createUserClient(r.accessToken);
@@ -73,7 +73,7 @@ menuRouter.post('/categories', async (req, res, next) => {
 
 menuRouter.patch('/categories/:id', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const id = z.string().uuid().parse(req.params.id);
     const body = categorySchema.partial().parse(req.body);
@@ -86,7 +86,7 @@ menuRouter.patch('/categories/:id', async (req, res, next) => {
 
 menuRouter.delete('/categories/:id', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const id = z.string().uuid().parse(req.params.id);
     const supabase = createUserClient(r.accessToken);
@@ -98,7 +98,7 @@ menuRouter.delete('/categories/:id', async (req, res, next) => {
 
 menuRouter.get('/modifiers', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     const supabase = createUserClient(r.accessToken);
     const { data, error } = await supabase.from('modifiers').select('*').eq('branch_id', r.branchId).order('name');
     if (error) throw error;
@@ -108,7 +108,7 @@ menuRouter.get('/modifiers', async (req, res, next) => {
 
 menuRouter.post('/modifiers', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const body = modifierSchema.parse(req.body);
     const supabase = createUserClient(r.accessToken);
@@ -120,7 +120,7 @@ menuRouter.post('/modifiers', async (req, res, next) => {
 
 menuRouter.patch('/modifiers/:id', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const id = z.string().uuid().parse(req.params.id);
     const body = modifierSchema.partial().parse(req.body);
@@ -133,7 +133,7 @@ menuRouter.patch('/modifiers/:id', async (req, res, next) => {
 
 menuRouter.delete('/modifiers/:id', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const id = z.string().uuid().parse(req.params.id);
     const supabase = createUserClient(r.accessToken);
@@ -145,7 +145,7 @@ menuRouter.delete('/modifiers/:id', async (req, res, next) => {
 
 menuRouter.get('/items', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     const supabase = createUserClient(r.accessToken);
     const { data, error } = await supabase
       .from('menu_items')
@@ -160,7 +160,7 @@ menuRouter.get('/items', async (req, res, next) => {
 
 menuRouter.post('/items', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const body = itemSchema.parse(req.body);
     const modifierIds = body.modifier_ids;
@@ -179,7 +179,7 @@ menuRouter.post('/items', async (req, res, next) => {
 
 menuRouter.patch('/items/:id', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const id = z.string().uuid().parse(req.params.id);
     const body = itemSchema.partial().parse(req.body);
@@ -201,7 +201,7 @@ menuRouter.patch('/items/:id', async (req, res, next) => {
 
 menuRouter.delete('/items/:id', async (req, res, next) => {
   try {
-    const r = req as BranchRequest;
+    const r = req as unknown as BranchRequest;
     if (!(await canManage(r))) return res.status(403).json({ success:false,message:'Manager permission required',code:'FORBIDDEN' });
     const id = z.string().uuid().parse(req.params.id);
     const supabase = createUserClient(r.accessToken);
