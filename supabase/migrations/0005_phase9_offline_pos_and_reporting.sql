@@ -102,7 +102,7 @@ begin
 
   update public.orders
   set subtotal = v_subtotal, tax_amount = v_tax, grand_total = v_subtotal + v_tax,
-      status = 'SENT_TO_KITCHEN'
+      status = 'OPEN'
   where id = v_order.id
   returning * into v_order;
 
