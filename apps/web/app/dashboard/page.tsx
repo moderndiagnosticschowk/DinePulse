@@ -30,6 +30,7 @@ const nav = [
   ['Inventory', '/inventory', '▤'],
   ['Purchases', '/purchases', '↗'],
   ['Suppliers', '/suppliers', '♧'],
+  ['Reports & Analytics', '/reports', '▥'],
 ];
 
 const quickActions = [
@@ -37,6 +38,7 @@ const quickActions = [
   { title: 'Open Tables', desc: 'Manage table status', href: '/tables', icon: '▦' },
   { title: 'Kitchen', desc: 'View live KOT queue', href: '/kitchen', icon: '◈' },
   { title: 'Inventory', desc: 'Check stock levels', href: '/inventory', icon: '▤' },
+  { title: 'Reports & Analytics', desc: 'Sales, payments and best sellers', href: '/reports', icon: '▥' },
 ];
 
 export default function DashboardPage() {
@@ -44,6 +46,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<Me['data'] | null>(null);
   const [error, setError] = useState('');
+  const [stats, setStats] = useState({ sales: 0, orders: 0, openTables: 0, lowStock: 0 });
 
   useEffect(() => {
     let active = true;
@@ -53,6 +56,22 @@ export default function DashboardPage() {
       try {
         const payload = await apiFetch<Me>('/api/v1/me');
         if (active) setMe(payload.data);
+        const branchId = payload.data.memberships?.[0]?.branches?.id;
+        if (branchId) {
+          const start = new Date();
+          start.setHours(0, 0, 0, 0);
+          const [ordersResult, tablesResult, stockResult] = await Promise.all([
+            supabase.from('orders').select('grand_total,status').eq('branch_id', branchId).gte('created_at', start.toISOString()).limit(1000),
+            supabase.from('restaurant_tables').select('id').eq('branch_id', branchId).in('status', ['OCCUPIED', 'BILLING']),
+            supabase.from('inventory_items').select('id').eq('branch_id', branchId).eq('is_active', true).filter('current_stock', 'lte', 'minimum_stock'),
+          ]);
+          if (active) setStats({
+            sales: (ordersResult.data ?? []).filter(order => order.status === 'PAID').reduce((sum, order) => sum + Number(order.grand_total), 0),
+            orders: ordersResult.data?.length ?? 0,
+            openTables: tablesResult.data?.length ?? 0,
+            lowStock: stockResult.data?.length ?? 0,
+          });
+        }
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : 'Unable to load workspace');
       } finally {
@@ -162,10 +181,10 @@ export default function DashboardPage() {
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              ['Today’s Sales', '₹0', 'Ready for live billing'],
-              ['Orders', '0', 'No orders yet'],
-              ['Open Tables', '0', 'Table management ready'],
-              ['Low Stock', '0', 'Inventory monitoring ready'],
+              ['Today’s Sales', `₹${stats.sales.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, 'Paid orders today'],
+              ['Orders Today', String(stats.orders), 'All order statuses'],
+              ['Open Tables', String(stats.openTables), 'Occupied or billing'],
+              ['Low Stock', String(stats.lowStock), 'Items at/below minimum'],
             ].map(([label, value, sub], index) => (
               <div key={label} className={`dp-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dp-fade-up dp-delay-${index + 1}`}>
                 <p className="text-sm font-semibold text-slate-500">{label}</p>
