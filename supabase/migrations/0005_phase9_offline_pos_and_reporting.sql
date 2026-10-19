@@ -110,4 +110,5 @@ begin
 end;
 $$;
 
+revoke all on function public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text) from public, anon;
 grant execute on function public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text) to authenticated;
