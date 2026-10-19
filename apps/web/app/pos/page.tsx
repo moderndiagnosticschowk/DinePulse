@@ -90,9 +90,7 @@ export default function POSPage() {
   }, [branchId]);
 
   useEffect(() => {
-    let active = true;
     setOnline(navigator.onLine);
-
     const onOnline = () => {
       setOnline(true);
       void syncQueue();
@@ -103,7 +101,14 @@ export default function POSPage() {
     };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [syncQueue]);
 
+  useEffect(() => {
+    let active = true;
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -173,16 +178,8 @@ export default function POSPage() {
       }
     })();
 
-    return () => {
-      active = false;
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, [syncQueue]);
-
-  useEffect(() => {
-    if (branchId && online && queuedOrders.length > 0) void syncQueue();
-  }, [branchId, online, queuedOrders.length, syncQueue]);
+    return () => { active = false; };
+  }, []);
 
   const visible = useMemo(
     () => category === 'all' ? items : items.filter(item => item.category_id === category),
