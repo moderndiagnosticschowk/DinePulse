@@ -175,7 +175,10 @@ begin
 end;
 $$;
 
-create or replace function public.consume_order_stock(
+-- PostgreSQL cannot change an existing function's return type with CREATE OR REPLACE.
+drop function if exists public.consume_order_stock(uuid, uuid, uuid);
+
+create function public.consume_order_stock(
   p_order_id uuid,
   p_branch_id uuid,
   p_user_id uuid
