@@ -129,7 +129,10 @@ begin
 end;
 $$;
 
-create or replace function public.receive_purchase(
+-- Drop the previous signature first because PostgreSQL cannot replace a function's return type.
+drop function if exists public.receive_purchase(uuid, uuid, uuid);
+
+create function public.receive_purchase(
   p_purchase_id uuid,
   p_branch_id uuid,
   p_user_id uuid
