@@ -57,8 +57,8 @@ begin
     reference_type, reference_id, notes, created_by
   )
   values (
-    p_branch_id, v_item.id, p_movement_type::public.stock_movement_type, abs(p_quantity),
-    p_reference_type, p_reference_id, left(p_notes, 500), coalesce(p_created_by, v_actor)
+    p_branch_id, v_item.id, p_movement_type::public.stock_movement_type, p_quantity,
+    p_reference_type, p_reference_id, left(p_notes, 500), v_actor
   )
   returning * into v_movement;
 
@@ -152,7 +152,7 @@ begin
     p_branch_id, p_supplier_id, nullif(trim(p_invoice_number), ''),
     coalesce(p_purchase_date, current_date), v_subtotal, v_tax, v_subtotal + v_tax,
     coalesce(p_payment_status, 'PENDING'), coalesce(p_paid_amount, 0), p_notes,
-    coalesce(p_user_id, auth.uid()), p_idempotency_key, 'DRAFT'
+    auth.uid(), p_idempotency_key, 'DRAFT'
   )
   returning * into v_purchase;
 
@@ -212,7 +212,7 @@ begin
   loop
     perform public.adjust_inventory_stock(
       p_branch_id, v_item.inventory_item_id, v_item.quantity, 'PURCHASE',
-      'PURCHASE', v_purchase.id, 'Purchase received', coalesce(p_user_id, v_actor)
+      'PURCHASE', v_purchase.id, 'Purchase received', v_actor
     );
     update public.inventory_items
     set cost_per_unit = v_item.unit_cost, updated_at = now()
