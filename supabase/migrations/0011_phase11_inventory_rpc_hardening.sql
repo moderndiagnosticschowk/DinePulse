@@ -33,7 +33,7 @@ begin
   if p_quantity is null or p_quantity = 0 then
     raise exception 'Quantity must be non-zero';
   end if;
-  if p_movement_type not in ('PURCHASE','SALE','WASTE','ADJUSTMENT_IN','ADJUSTMENT_OUT') then
+  if p_movement_type not in ('PURCHASE','SALE','WASTE','ADJUSTMENT_IN','ADJUSTMENT_OUT','RETURN') then
     raise exception 'Invalid movement type';
   end if;
 
