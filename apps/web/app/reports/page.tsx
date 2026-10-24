@@ -37,15 +37,22 @@ export default function ReportsPage() {
       const from = new Date();
       from.setHours(0, 0, 0, 0);
       from.setDate(from.getDate() - (range - 1));
-      const { data: orderData, error: ordersError } = await supabase
-        .from('orders')
-        .select('id,order_number,status,order_type,grand_total,created_at')
-        .eq('branch_id', branchId)
-        .gte('created_at', from.toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1000);
-      if (ordersError) throw ordersError;
-      const rows = (orderData ?? []) as OrderRow[];
+      const pageSize = 500;
+      const rows: OrderRow[] = [];
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error: ordersError } = await supabase
+          .from('orders')
+          .select('id,order_number,status,order_type,grand_total,created_at')
+          .eq('branch_id', branchId)
+          .gte('created_at', from.toISOString())
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (ordersError) throw ordersError;
+        const page = (data ?? []) as OrderRow[];
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
       const paidIds = rows.filter(order => order.status === 'PAID').map(order => order.id);
       if (!paidIds.length) {
         setOrders(rows);
@@ -53,15 +60,28 @@ export default function ReportsPage() {
         setPayments([]);
         return;
       }
-      const [itemResult, paymentResult] = await Promise.all([
-        supabase.from('order_items').select('order_id,item_name,quantity,line_total').in('order_id', paidIds),
-        supabase.from('payments').select('order_id,payment_method,amount,status').in('order_id', paidIds).eq('status', 'COMPLETED'),
-      ]);
-      if (itemResult.error) throw itemResult.error;
-      if (paymentResult.error) throw paymentResult.error;
+      const itemRows: ItemRow[] = [];
+      const paymentRows: PaymentRow[] = [];
+      const idBatchSize = 100;
+      for (let index = 0; index < paidIds.length; index += idBatchSize) {
+        const idBatch = paidIds.slice(index, index + idBatchSize);
+        for (let offset = 0; ; offset += pageSize) {
+          const [itemResult, paymentResult] = await Promise.all([
+            supabase.from('order_items').select('id,order_id,item_name,quantity,line_total').in('order_id', idBatch).order('id', { ascending: true }).range(offset, offset + pageSize - 1),
+            supabase.from('payments').select('id,order_id,payment_method,amount,status').in('order_id', idBatch).eq('status', 'COMPLETED').order('id', { ascending: true }).range(offset, offset + pageSize - 1),
+          ]);
+          if (itemResult.error) throw itemResult.error;
+          if (paymentResult.error) throw paymentResult.error;
+          const itemPage = (itemResult.data ?? []) as ItemRow[];
+          const paymentPage = (paymentResult.data ?? []) as PaymentRow[];
+          itemRows.push(...itemPage);
+          paymentRows.push(...paymentPage);
+          if (itemPage.length < pageSize && paymentPage.length < pageSize) break;
+        }
+      }
       setOrders(rows);
-      setItems((itemResult.data ?? []) as ItemRow[]);
-      setPayments((paymentResult.data ?? []) as PaymentRow[]);
+      setItems(itemRows);
+      setPayments(paymentRows);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load reports.');
     } finally {
