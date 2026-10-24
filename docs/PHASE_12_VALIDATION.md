@@ -14,6 +14,7 @@
 
 ## API work
 - No Express endpoint is added in this phase. Direct Supabase queries remain branch-filtered and subject to RLS.
+- `.github/workflows/quality.yml` adds pull-request/main-push gates for root typecheck, lint and build.
 - If real-world branch volumes make client-side aggregation too expensive, move aggregates into a reviewed SQL RPC/API endpoint in a later phase; do not reintroduce arbitrary row caps.
 
 ## UI work
