@@ -35,6 +35,9 @@ export default function ReportsPage() {
     const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError('');
+    setOrders([]);
+    setItems([]);
+    setPayments([]);
     try {
       const from = new Date();
       from.setHours(0, 0, 0, 0);
