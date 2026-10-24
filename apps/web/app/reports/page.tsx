@@ -137,8 +137,6 @@ export default function ReportsPage() {
   }, [load, branchId]);
 
 
-  useEffect(() => { void load(); }, [load]);
-
   const paidOrders = useMemo(() => orders.filter(order => order.status === 'PAID'), [orders]);
   const sales = paidOrders.reduce((sum, order) => sum + Number(order.grand_total), 0);
   const averageBill = paidOrders.length ? sales / paidOrders.length : 0;
