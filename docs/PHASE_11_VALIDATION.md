@@ -23,9 +23,11 @@ This is a forward-only migration and intentionally does not rewrite old migratio
 3. Confirm `anon` cannot execute these RPCs and `authenticated` can execute them.
 4. Test a valid inventory manager adjustment, an unauthorised user, a user from a different branch, a cross-branch item ID, an invalid movement type, and an attempt to reduce stock below zero.
 5. Create and receive a purchase; verify inventory and stock movements change exactly once. Retry receiving it and verify no duplicate movements.
-6. Consume order stock with a recipe, retry the same order, and verify stock is not deducted twice.
-7. Run root `npm run typecheck`, `npm run build`, and `npm run lint`; then exercise the inventory endpoints against staging.
-8. Review the Supabase security advisor and database logs before production rollout.
+6. Consume order stock with a recipe, retry the same order, and verify stock is not deducted twice. Also test an order whose legacy movement rows use `ORDER_CONSUMPTION` so the compatibility guard prevents a second deduction.
+7. Submit two concurrent purchase-create requests with the same branch and idempotency key; both responses must identify the same purchase, with one purchase row and one set of purchase items.
+8. Confirm `received_by` and `stock_movements.created_by` always use `auth.uid()` rather than caller-supplied user IDs.
+9. Run root `npm run typecheck`, `npm run build`, and `npm run lint`; then exercise the inventory endpoints against staging.
+10. Review the Supabase security advisor and database logs before production rollout.
 
-## Known limitation
-The order-consumption idempotency guard relies on the presence of at least one `ORDER` stock movement. Orders without recipe ingredients create no movement and therefore have no consumption marker. Consider a dedicated consumption ledger or an order-level consumed timestamp in a separately reviewed migration if recipe-less orders need a durable marker.
+## Known limitation / release blocker
+The order-consumption idempotency guard still relies on at least one stock movement being present. A recipe-less order creates no movement and therefore has no durable consumption marker. Before claiming full idempotency or starting production rollout, add a durable order-consumption ledger/marker with branch-safe permissions and test recipe-less orders. The compatibility guard now recognizes both `ORDER` and legacy `ORDER_CONSUMPTION` movement references.
