@@ -1,6 +1,6 @@
 # DinePulse Implementation Status
 
-Last updated: 2026-10-19
+Last updated: 2026-10-24
 
 ## Implemented in repository
 
@@ -12,6 +12,8 @@ Last updated: 2026-10-19
 | 7–8 | Inventory, recipes, suppliers, purchases and stock RPCs | Hardened migrations and UI/API are present; target database must be verified |
 | 9 | Offline-ready POS | Browser menu cache, device-local queued drafts, reconnect retry, and idempotent server RPC added |
 | 10 | Reporting | Branch-level sales report, daily trend, payment mix, best sellers and dashboard metrics added |
+| 11 | Inventory RPC hardening | Draft PR #1; static review fixes added; recipe-less order marker and staging verification still outstanding |
+| 12 | Branch-aware analytics | Draft PR #2; branch selector, paid-order scoping, paginated queries and quality workflow proposed; CI/staging verification still outstanding |
 
 ## Phase 9 details
 
@@ -28,6 +30,12 @@ Last updated: 2026-10-19
 - Shows paid sales, paid order count, average bill, open order count, daily sales bars, completed payment mix, best-selling items, and recent orders.
 - Dashboard summary cards now query live branch data for today's orders/sales, occupied/billing tables, and low-stock items.
 - Reports are operational summaries, not a replacement for audited accounting exports.
+
+## Current release gate (2026-10-24)
+
+- Phase 11: do not apply migration `0011_phase11_inventory_rpc_hardening.sql` to production until the recipe-less consumption marker is resolved and the migration is validated on a staging database matching the live schema.
+- Phase 12: do not merge as production-complete until typecheck, lint, build, multi-branch RLS tests, and pagination/reconciliation tests pass.
+- Phases 1–10 have implementation in the repository, but the checks below are still required before claiming production verification.
 
 ## Required manual/deployment steps
 
