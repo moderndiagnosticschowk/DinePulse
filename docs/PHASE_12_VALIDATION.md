@@ -29,7 +29,7 @@
 4. A user with no active branch sees the no-membership message; signed-out users see the sign-in message.
 5. Seed more than 500 orders and more than 500 order items/payment rows; verify pagination includes all matching rows exactly once.
 6. Verify open, unpaid and cancelled orders do not contribute to best-seller ranking or completed payment mix; paid sales totals reconcile with paid orders.
-7. Test 7, 30 and 90 days, empty periods, refresh, slow responses and query errors.
+7. Test 7, 30 and 90 days, empty periods, refresh, slow responses and query errors. Rapidly switch branches/ranges while a request is in flight and confirm stale responses cannot overwrite the latest selection.
 8. Run root `npm run typecheck`, `npm run lint`, and `npm run build`.
 9. In staging, use two branches with distinct orders and confirm a branch-A user cannot read branch-B data by changing browser state or query parameters.
 
