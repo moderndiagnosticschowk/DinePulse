@@ -33,7 +33,7 @@ begin
   if p_quantity is null or p_quantity = 0 then
     raise exception 'Quantity must be non-zero';
   end if;
-  if p_movement_type not in ('PURCHASE','SALE','WASTE','ADJUSTMENT_IN','ADJUSTMENT_OUT','RETURN') then
+  if p_movement_type is null or p_movement_type not in ('PURCHASE','SALE','WASTE','ADJUSTMENT_IN','ADJUSTMENT_OUT','RETURN') then
     raise exception 'Invalid movement type';
   end if;
 
@@ -144,17 +144,31 @@ begin
     v_tax := v_tax + v_line_tax;
   end loop;
 
-  insert into public.purchases(
-    branch_id, supplier_id, invoice_number, purchase_date, subtotal, tax_amount,
-    total_amount, payment_status, paid_amount, notes, created_by, idempotency_key, status
-  )
-  values (
-    p_branch_id, p_supplier_id, nullif(trim(p_invoice_number), ''),
-    coalesce(p_purchase_date, current_date), v_subtotal, v_tax, v_subtotal + v_tax,
-    coalesce(p_payment_status, 'PENDING'), coalesce(p_paid_amount, 0), p_notes,
-    auth.uid(), p_idempotency_key, 'DRAFT'
-  )
-  returning * into v_purchase;
+  begin
+    insert into public.purchases(
+      branch_id, supplier_id, invoice_number, purchase_date, subtotal, tax_amount,
+      total_amount, payment_status, paid_amount, notes, created_by, idempotency_key, status
+    )
+    values (
+      p_branch_id, p_supplier_id, nullif(trim(p_invoice_number), ''),
+      coalesce(p_purchase_date, current_date), v_subtotal, v_tax, v_subtotal + v_tax,
+      coalesce(p_payment_status, 'PENDING'), coalesce(p_paid_amount, 0), p_notes,
+      auth.uid(), p_idempotency_key, 'DRAFT'
+    )
+    returning * into v_purchase;
+  exception when unique_violation then
+    -- Concurrent retries can pass the initial lookup before either transaction commits.
+    -- Return the winning purchase only when the idempotency key identifies it.
+    if p_idempotency_key is not null then
+      select * into v_purchase
+      from public.purchases
+      where branch_id = p_branch_id and idempotency_key = p_idempotency_key;
+      if found then
+        return jsonb_build_object('purchase', to_jsonb(v_purchase), 'duplicate', true);
+      end if;
+    end if;
+    raise;
+  end;
 
   for v_line in select value from jsonb_array_elements(p_items) loop
     insert into public.purchase_items(
@@ -221,7 +235,7 @@ begin
 
   update public.purchases
   set status = 'RECEIVED', received_at = now(),
-      received_by = coalesce(p_user_id, v_actor), updated_at = now()
+      received_by = v_actor, updated_at = now()
   where id = v_purchase.id
   returning * into v_purchase;
   return v_purchase;
@@ -263,7 +277,7 @@ begin
   if exists (
     select 1 from public.stock_movements
     where branch_id = p_branch_id
-      and reference_type = 'ORDER'
+      and reference_type in ('ORDER', 'ORDER_CONSUMPTION')
       and reference_id = p_order_id
   ) then
     return 0;
@@ -286,7 +300,7 @@ begin
       v_needed := (v_ingredient.quantity / v_ingredient.yield_quantity) * v_order_item.quantity;
       perform public.adjust_inventory_stock(
         p_branch_id, v_ingredient.inventory_item_id, -v_needed, 'SALE',
-        'ORDER', p_order_id, 'Recipe consumption', coalesce(p_user_id, v_actor)
+        'ORDER', p_order_id, 'Recipe consumption', v_actor
       );
       v_count := v_count + 1;
     end loop;
