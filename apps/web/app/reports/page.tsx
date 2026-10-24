@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 type OrderRow = {
@@ -26,11 +26,13 @@ export default function ReportsPage() {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [branchId, setBranchId] = useState('');
+  const loadRequestRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     if (!branchId) return;
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError('');
     try {
@@ -53,6 +55,7 @@ export default function ReportsPage() {
         rows.push(...page);
         if (page.length < pageSize) break;
       }
+      if (requestId !== loadRequestRef.current) return;
       const paidIds = rows.filter(order => order.status === 'PAID').map(order => order.id);
       if (!paidIds.length) {
         setOrders(rows);
@@ -79,13 +82,16 @@ export default function ReportsPage() {
           if (itemPage.length < pageSize && paymentPage.length < pageSize) break;
         }
       }
+      if (requestId !== loadRequestRef.current) return;
       setOrders(rows);
       setItems(itemRows);
       setPayments(paymentRows);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to load reports.');
+      if (requestId === loadRequestRef.current) {
+        setError(e instanceof Error ? e.message : 'Unable to load reports.');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }, [range, branchId]);
 
