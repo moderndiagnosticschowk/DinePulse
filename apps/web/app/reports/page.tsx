@@ -15,6 +15,7 @@ type OrderRow = {
 type ItemRow = { order_id: string; item_name: string; quantity: number | string; line_total: number | string };
 type PaymentRow = { order_id: string; payment_method: string; amount: number | string; status: string };
 type DaySales = { label: string; sales: number; orders: number };
+type Membership = { branch_id: string; role: string; branches: { id: string; name: string; code: string | null } | null };
 
 const money = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
@@ -23,53 +24,38 @@ export default function ReportsPage() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [branchId, setBranchId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
+    if (!branchId) return;
     setLoading(true);
     setError('');
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        setError('Please sign in to view reports.');
-        return;
-      }
-      const { data: membership, error: membershipError } = await supabase
-        .from('branch_memberships')
-        .select('branch_id')
-        .eq('user_id', session.user.id)
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-      if (membershipError) throw membershipError;
-      if (!membership?.branch_id) {
-        setError('No active restaurant branch is linked to this account.');
-        return;
-      }
-
       const from = new Date();
       from.setHours(0, 0, 0, 0);
       from.setDate(from.getDate() - (range - 1));
       const { data: orderData, error: ordersError } = await supabase
         .from('orders')
         .select('id,order_number,status,order_type,grand_total,created_at')
-        .eq('branch_id', membership.branch_id)
+        .eq('branch_id', branchId)
         .gte('created_at', from.toISOString())
         .order('created_at', { ascending: false })
         .limit(1000);
       if (ordersError) throw ordersError;
       const rows = (orderData ?? []) as OrderRow[];
-      const ids = rows.map(order => order.id);
-      if (!ids.length) {
-        setOrders([]);
+      const paidIds = rows.filter(order => order.status === 'PAID').map(order => order.id);
+      if (!paidIds.length) {
+        setOrders(rows);
         setItems([]);
         setPayments([]);
         return;
       }
       const [itemResult, paymentResult] = await Promise.all([
-        supabase.from('order_items').select('order_id,item_name,quantity,line_total').in('order_id', ids),
-        supabase.from('payments').select('order_id,payment_method,amount,status').in('order_id', ids).eq('status', 'COMPLETED'),
+        supabase.from('order_items').select('order_id,item_name,quantity,line_total').in('order_id', paidIds),
+        supabase.from('payments').select('order_id,payment_method,amount,status').in('order_id', paidIds).eq('status', 'COMPLETED'),
       ]);
       if (itemResult.error) throw itemResult.error;
       if (paymentResult.error) throw paymentResult.error;
@@ -81,7 +67,55 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, branchId]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          if (active) {
+            setError('Please sign in to view reports.');
+            setLoading(false);
+          }
+          return;
+        }
+        const { data, error: membershipError } = await supabase
+          .from('branch_memberships')
+          .select('branch_id,role,branches(id,name,code)')
+          .eq('user_id', session.user.id)
+          .eq('is_active', true);
+        if (membershipError) throw membershipError;
+        const available = (data ?? []) as Membership[];
+        if (!active) return;
+        setMemberships(available);
+        const savedBranchId = localStorage.getItem('dinepulse:active-branch-id');
+        const chosenBranchId = available.find(membership => membership.branch_id === savedBranchId)?.branch_id
+          ?? available[0]?.branch_id
+          ?? '';
+        if (!chosenBranchId) {
+          setError('No active restaurant branch is linked to this account.');
+          setLoading(false);
+          return;
+        }
+        setBranchId(chosenBranchId);
+      } catch (e) {
+        if (active) {
+          setError(e instanceof Error ? e.message : 'Unable to load branch memberships.');
+          setLoading(false);
+        }
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (branchId) void load();
+  }, [load, branchId]);
+
 
   useEffect(() => { void load(); }, [load]);
 
@@ -136,8 +170,32 @@ export default function ReportsPage() {
           <div>
             <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-slate-950">← Dashboard</Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Reports & Analytics</h1>
-            <p className="mt-1 text-sm text-slate-500">Branch-level sales, order trends, best sellers and payment mix.</p>
+            <p className="mt-1 text-sm text-slate-500">Reports for {memberships.find(membership => membership.branch_id === branchId)?.branches?.name ?? 'your selected branch'}: sales, trends, best sellers and payment mix.</p>
           </div>
+          {memberships.length > 1 && (
+            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
+              Branch
+              <select
+                aria-label="Select report branch"
+                value={branchId}
+                onChange={event => {
+                  const nextBranchId = event.target.value;
+                  if (memberships.some(membership => membership.branch_id === nextBranchId)) {
+                    localStorage.setItem('dinepulse:active-branch-id', nextBranchId);
+                    setBranchId(nextBranchId);
+                  }
+                }}
+                className="max-w-48 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-bold text-slate-800"
+              >
+                {memberships.map(membership => (
+                  <option key={membership.branch_id} value={membership.branch_id}>
+                    {membership.branches?.name ?? membership.branch_id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <div className="flex gap-2 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
             {([7, 30, 90] as const).map(days => (
               <button key={days} onClick={() => setRange(days)} className={`rounded-lg px-3 py-2 text-sm font-bold ${range === days ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{days} days</button>
