@@ -39,7 +39,8 @@ export default function ReportsPage() {
     setItems([]);
     setPayments([]);
     try {
-      const from = new Date();
+      const to = new Date();
+      const from = new Date(to);
       from.setHours(0, 0, 0, 0);
       from.setDate(from.getDate() - (range - 1));
       const pageSize = 500;
@@ -50,6 +51,7 @@ export default function ReportsPage() {
           .select('id,order_number,status,order_type,grand_total,created_at')
           .eq('branch_id', branchId)
           .gte('created_at', from.toISOString())
+          .lte('created_at', to.toISOString())
           .order('created_at', { ascending: false })
           .order('id', { ascending: true })
           .range(offset, offset + pageSize - 1);
