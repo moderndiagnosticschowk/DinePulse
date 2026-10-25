@@ -242,14 +242,30 @@ begin
 end;
 $$;
 
+-- Durable marker for all consumed orders, including orders with no configured recipe.
+-- Direct table access is intentionally denied; the SECURITY DEFINER RPC owns writes.
+create table if not exists public.order_stock_consumptions (
+  order_id uuid primary key references public.orders(id) on delete cascade,
+  branch_id uuid not null references public.branches(id) on delete cascade,
+  consumed_by uuid not null,
+  movement_count integer not null default 0 check (movement_count >= 0),
+  consumed_at timestamptz not null default now()
+);
+
+create index if not exists idx_order_stock_consumptions_branch_time
+  on public.order_stock_consumptions(branch_id, consumed_at desc);
+
+alter table public.order_stock_consumptions enable row level security;
+revoke all on table public.order_stock_consumptions from public, anon, authenticated;
+
 create or replace function public.consume_order_stock(
   p_order_id uuid,
   p_branch_id uuid,
   p_user_id uuid
 ) returns integer
 language plpgsql
-security invoker
-set search_path = public
+security definer
+set search_path = pg_catalog, public
 as $$
 declare
   v_order public.orders%rowtype;
@@ -269,17 +285,30 @@ begin
     raise exception 'Order stock permission required' using errcode = '42501';
   end if;
 
-  select * into v_order from public.orders
+  -- Serialize retries for the same order before checking the durable ledger.
+  select * into v_order
+  from public.orders
   where id = p_order_id and branch_id = p_branch_id
   for update;
   if not found then raise exception 'Order not found in this branch'; end if;
 
+  if exists (
+    select 1 from public.order_stock_consumptions
+    where order_id = p_order_id and branch_id = p_branch_id
+  ) then
+    return 0;
+  end if;
+
+  -- Backfill a marker for orders consumed by the legacy movement-only implementation.
   if exists (
     select 1 from public.stock_movements
     where branch_id = p_branch_id
       and reference_type in ('ORDER', 'ORDER_CONSUMPTION')
       and reference_id = p_order_id
   ) then
+    insert into public.order_stock_consumptions(order_id, branch_id, consumed_by, movement_count)
+    values (p_order_id, p_branch_id, v_actor, 0)
+    on conflict (order_id) do nothing;
     return 0;
   end if;
 
@@ -292,11 +321,15 @@ begin
       select ri.inventory_item_id, ri.quantity, r.yield_quantity
       from public.recipes r
       join public.recipe_ingredients ri on ri.recipe_id = r.id
-      where r.branch_id = p_branch_id and r.menu_item_id = v_order_item.menu_item_id
+      where r.branch_id = p_branch_id
+        and r.menu_item_id = v_order_item.menu_item_id
     loop
-      if v_ingredient.yield_quantity is null or v_ingredient.yield_quantity <= 0 then
-        raise exception 'Recipe yield quantity must be positive';
+      if v_ingredient.yield_quantity is null or v_ingredient.yield_quantity <= 0
+        or v_ingredient.quantity is null or v_ingredient.quantity <= 0
+        or v_order_item.quantity is null or v_order_item.quantity <= 0 then
+        raise exception 'Recipe quantities and yield must be positive';
       end if;
+
       v_needed := (v_ingredient.quantity / v_ingredient.yield_quantity) * v_order_item.quantity;
       perform public.adjust_inventory_stock(
         p_branch_id, v_ingredient.inventory_item_id, -v_needed, 'SALE',
@@ -305,6 +338,12 @@ begin
       v_count := v_count + 1;
     end loop;
   end loop;
+
+  -- Insert even when no recipes/ingredients exist so retry is still idempotent.
+  insert into public.order_stock_consumptions(order_id, branch_id, consumed_by, movement_count)
+  values (p_order_id, p_branch_id, v_actor, v_count)
+  on conflict (order_id) do nothing;
+
   return v_count;
 end;
 $$;
