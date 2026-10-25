@@ -348,8 +348,8 @@ begin
 end;
 $$;
 
--- Remove direct anonymous/public execution. Authenticated calls still pass
--- through explicit per-function branch-role checks and table RLS.
+-- Remove direct anonymous/public execution. Authenticated calls pass explicit
+-- per-function branch-role checks; ledger table access is only through the guarded RPC.
 revoke all on function public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid) from public, anon;
 revoke all on function public.create_purchase(uuid,uuid,uuid,text,date,numeric,text,numeric,text,jsonb,text) from public, anon;
 revoke all on function public.receive_purchase(uuid,uuid,uuid) from public, anon;
