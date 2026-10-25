@@ -4,7 +4,7 @@
 - Load the signed-in user's active branch memberships.
 - Show a branch selector when the user has more than one active branch.
 - Restore a saved branch only if it is still an active membership; otherwise fall back to the first active membership.
-- Scope every report query to the selected branch.
+- Scope every report query to the selected branch and selected time window, including an explicit upper bound at the current time.
 - Restrict best-selling item and payment-mix inputs to paid orders so open/cancelled orders do not inflate those views.
 - Page through orders, order items and completed payments rather than silently truncating at the default 1,000-row result limit.
 
@@ -28,7 +28,7 @@
 2. Multi-branch user can switch branches; all KPI, daily trend, best-seller, payment-mix and recent-order values change to the selected branch.
 3. A saved branch ID that is no longer an active membership falls back to an allowed branch.
 4. A user with no active branch sees the no-membership message; signed-out users see the sign-in message.
-5. Seed more than 500 orders and more than 500 order items/payment rows; verify pagination includes all matching rows exactly once.
+5. Seed more than 500 orders and more than 500 order items/payment rows; verify pagination includes all matching rows exactly once. Verify orders timestamped after the report's captured end time are excluded.
 6. Verify open, unpaid and cancelled orders do not contribute to best-seller ranking or completed payment mix; paid sales totals reconcile with paid orders.
 7. Test 7, 30 and 90 days, empty periods, refresh, slow responses and query errors. Rapidly switch branches/ranges while a request is in flight and confirm stale responses cannot overwrite the latest selection.
 8. Run root `npm run typecheck`, `npm run lint`, and `npm run build`.
