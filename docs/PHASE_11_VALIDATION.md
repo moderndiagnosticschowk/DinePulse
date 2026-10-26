@@ -19,6 +19,11 @@ This is a forward-only migration and intentionally does not rewrite old migratio
 
 Run it only against a disposable/staging Supabase database **after** migration 0011. It has not been executed in this run and does not replace behavioral integration tests.
 
+## Latest CI follow-up (2026-10-26)
+
+- GitHub Actions confirmed root typecheck passes on the Phase 11 PR, but lint failed before build because the web ESLint config used `FlatCompat` with Next.js 16's native flat config and triggered a circular-config error.
+- `apps/web/eslint.config.mjs` now uses the native `eslint-config-next/core-web-vitals` and `eslint-config-next/typescript` flat configs. The follow-up workflow must pass before Phase 11 can be marked complete.
+
 ## Required verification before production
 1. Apply the migration to a disposable/staging database matching the inspected live schema.
 2. Run `supabase/tests/phase11_inventory_rpc_contracts.sql` and confirm it passes.
