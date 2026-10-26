@@ -15,7 +15,7 @@ type OrderRow = {
 type ItemRow = { order_id: string; item_name: string; quantity: number | string; line_total: number | string };
 type PaymentRow = { order_id: string; payment_method: string; amount: number | string; status: string };
 type DaySales = { label: string; sales: number; orders: number };
-type Membership = { branch_id: string; role: string; branches: { id: string; name: string; code: string | null } | null };
+type Membership = { branch_id: string; role: string; branches: { id: string; name: string; code: string | null }[] | null };
 
 const money = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
@@ -199,7 +199,7 @@ export default function ReportsPage() {
           <div>
             <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-slate-950">← Dashboard</Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Reports & Analytics</h1>
-            <p className="mt-1 text-sm text-slate-500">Reports for {memberships.find(membership => membership.branch_id === branchId)?.branches?.name ?? 'your selected branch'}: sales, trends, best sellers and payment mix.</p>
+            <p className="mt-1 text-sm text-slate-500">Reports for {memberships.find(membership => membership.branch_id === branchId)?.branches?.[0]?.name ?? 'your selected branch'}: sales, trends, best sellers and payment mix.</p>
           </div>
           {memberships.length > 1 && (
             <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
@@ -218,7 +218,7 @@ export default function ReportsPage() {
               >
                 {memberships.map(membership => (
                   <option key={membership.branch_id} value={membership.branch_id}>
-                    {membership.branches?.name ?? membership.branch_id.slice(0, 8)}
+                    {membership.branches?.[0]?.name ?? membership.branch_id.slice(0, 8)}
                   </option>
                 ))}
               </select>
