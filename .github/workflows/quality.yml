@@ -31,4 +31,7 @@ jobs:
         run: npm run lint
       - name: Build
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
         run: npm run build
