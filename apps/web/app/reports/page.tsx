@@ -103,8 +103,6 @@ export default function ReportsPage() {
   useEffect(() => {
     let active = true;
     (async () => {
-      setLoading(true);
-      setError('');
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user) {
@@ -144,7 +142,15 @@ export default function ReportsPage() {
   }, []);
 
   useEffect(() => {
-    if (branchId) void load();
+    if (!branchId) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void load();
+    });
+    return () => {
+      active = false;
+      loadRequestRef.current += 1;
+    };
   }, [load, branchId]);
 
 
