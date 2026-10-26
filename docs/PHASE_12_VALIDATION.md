@@ -34,6 +34,12 @@
 8. Run root `npm run typecheck`, `npm run lint`, and `npm run build`.
 9. In staging, use two branches with distinct orders and confirm a branch-A user cannot read branch-B data by changing browser state or query parameters.
 
+## Latest CI follow-up (2026-10-26)
+
+- The previous GitHub Actions run failed at web typecheck because Supabase returned the nested `branches` relation as an array while the `Membership` type and UI treated it as a single object.
+- The reports page now types the relation as an array and reads the first related branch name.
+- The follow-up quality run must pass typecheck, lint and build before Phase 12 can be marked complete. This fix has not yet been verified by a successful new workflow run.
+
 ## Completion criteria
 Do not mark Phase 12 complete until the three root checks pass and the multi-branch + pagination scenarios pass against staging. A code commit or successful hosting build alone is not end-to-end verification.
 
