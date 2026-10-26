@@ -36,9 +36,10 @@
 
 ## Latest CI follow-up (2026-10-26)
 
-- The prior report typecheck mismatch was fixed by treating the nested `branches` relation as an array.
-- GitHub Actions then exposed a separate lint infrastructure failure: the web ESLint config used `FlatCompat` with Next.js 16's native flat config and triggered a circular-config error.
-- `apps/web/eslint.config.mjs` now uses the native Next.js 16 flat config. A new successful typecheck/lint/build run is still required.
+- The branch relation type mismatch was fixed and root typecheck passed in the latest completed run.
+- Next.js 16's native ESLint flat config now loads correctly. Lint still reports existing errors across unrelated pages; the reports page's effect scheduling was also adjusted to avoid synchronous state updates and invalidate stale requests on cleanup.
+- The previous build attempt failed because public Supabase build-time environment variables were absent. CI now supplies non-secret placeholder public values for build-only compilation and runs typecheck, lint and build independently.
+- The newest workflow result is pending; do not treat Phase 12 as complete until checks and staging acceptance tests pass.
 
 ## Completion criteria
 Do not mark Phase 12 complete until the three root checks pass and the multi-branch + pagination scenarios pass against staging. A code commit or successful hosting build alone is not end-to-end verification.
