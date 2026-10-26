@@ -21,10 +21,10 @@ Run it only against a disposable/staging Supabase database **after** migration 0
 
 ## Latest CI follow-up (2026-10-26)
 
-- Root typecheck passed in the latest completed Phase 11 run.
-- Switching the web config to Next.js 16's native flat config fixed the ESLint config-loader crash, but lint now reports existing errors across billing, inventory, kitchen, orders, POS, reports, suppliers and tables (including `no-explicit-any` and `react-hooks/set-state-in-effect`).
-- The previous build attempt was blocked because public Supabase build-time environment variables were absent. The workflow now uses non-secret placeholder public values for build-only compilation and runs typecheck, lint and build independently.
-- The newest workflow result is pending; do not treat lint/build as passing until results are available.
+- Latest completed Phase 11 workflow run #40: typecheck **passed**, build **passed**, lint **failed**.
+- Lint now loads under Next.js 16's native flat config, but reports existing web-app errors in billing, inventory, kitchen, orders, POS, suppliers and tables (mainly `no-explicit-any` and `react-hooks/set-state-in-effect`).
+- CI build uses non-secret placeholder Supabase public environment values; these are for compilation only and are not deployment credentials.
+- Read-only SQL contract assertions are committed but **not executed**. No Supabase development branches are listed, and no staging database migration or behavioral inventory tests have been run.
 
 ## Required verification before production
 1. Apply the migration to a disposable/staging database matching the inspected live schema.
