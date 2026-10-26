@@ -1,6 +1,6 @@
 # DinePulse Implementation Status
 
-Last updated: 2026-10-24
+Last updated: 2026-10-26
 
 ## Implemented in repository
 
@@ -12,8 +12,8 @@ Last updated: 2026-10-24
 | 7–8 | Inventory, recipes, suppliers, purchases and stock RPCs | Hardened migrations and UI/API are present; target database must be verified |
 | 9 | Offline-ready POS | Browser menu cache, device-local queued drafts, reconnect retry, and idempotent server RPC added |
 | 10 | Reporting | Branch-level sales report, daily trend, payment mix, best sellers and dashboard metrics added |
-| 11 | Inventory RPC hardening | Draft PR #1; static review fixes added; recipe-less order marker and staging verification still outstanding |
-| 12 | Branch-aware analytics | Draft PR #2; branch selector, paid-order scoping, paginated queries and quality workflow proposed; CI/staging verification still outstanding |
+| 11 | Inventory RPC hardening | Draft PR #1; durable ledger and SQL contract assertions added; typecheck/build pass, lint baseline fails, staging migration/tests pending |
+| 12 | Branch-aware analytics | Draft PR #2; branch selector, paid-order scoping, pagination and stale-response protection added; typecheck/build pass, lint baseline fails, staging tests pending |
 
 ## Phase 9 details
 
@@ -31,10 +31,10 @@ Last updated: 2026-10-24
 - Dashboard summary cards now query live branch data for today's orders/sales, occupied/billing tables, and low-stock items.
 - Reports are operational summaries, not a replacement for audited accounting exports.
 
-## Current release gate (2026-10-24)
+## Current release gate (2026-10-26)
 
-- Phase 11: do not apply migration `0011_phase11_inventory_rpc_hardening.sql` to production until the recipe-less consumption marker is resolved and the migration is validated on a staging database matching the live schema.
-- Phase 12: do not merge as production-complete until typecheck, lint, build, multi-branch RLS tests, and pagination/reconciliation tests pass.
+- Phase 11: the recipe-less consumption marker is now in the proposed migration, but do not apply `0011_phase11_inventory_rpc_hardening.sql` to production until the SQL contract assertions and behavioral inventory tests pass on a staging database matching the live schema.
+- Phase 12: typecheck and build pass in CI, but lint still fails on existing app-wide errors; do not merge as production-complete until lint is resolved and multi-branch RLS, pagination, date-window and reconciliation tests pass.
 - Phases 1–10 have implementation in the repository, but the checks below are still required before claiming production verification.
 
 ## Required manual/deployment steps
@@ -48,4 +48,4 @@ Last updated: 2026-10-24
 
 ## Verification honesty
 
-Changes were committed to GitHub, but a local typecheck/build, the live Supabase migration, and browser end-to-end tests have **not** been run or independently confirmed as part of these commits. Do not mark the phases production-verified until those checks pass.
+GitHub Actions has confirmed typecheck and build pass for the latest Phase 11/12 branches, but lint still fails on existing web-app errors. The live Supabase migration, SQL contract test, and browser/staging end-to-end tests have **not** been run or independently confirmed. Do not mark the phases production-verified until those checks pass. Do not mark the phases production-verified until those checks pass.
