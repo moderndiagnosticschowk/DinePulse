@@ -144,11 +144,12 @@ export default function ReportsPage() {
   useEffect(() => {
     if (!branchId) return;
     let active = true;
-    queueMicrotask(() => {
+    const timer = window.setTimeout(() => {
       if (active) void load();
-    });
+    }, 0);
     return () => {
       active = false;
+      window.clearTimeout(timer);
       loadRequestRef.current += 1;
     };
   }, [load, branchId]);
@@ -249,7 +250,7 @@ export default function ReportsPage() {
                 { label: 'Paid orders', value: String(paidOrders.length), sub: 'Completed payments' },
                 { label: 'Average bill', value: money(averageBill), sub: 'Paid sales ÷ paid orders' },
                 { label: 'Open orders', value: String(openOrders), sub: 'Awaiting completion' },
-              ].map((card, index) => (
+              ].map((card) => (
                 <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-sm font-semibold text-slate-500">{card.label}</p>
                   <p className="mt-3 text-2xl font-black">{card.value}</p>
