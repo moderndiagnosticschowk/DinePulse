@@ -34,11 +34,11 @@
 8. Run root `npm run typecheck`, `npm run lint`, and `npm run build`.
 9. In staging, use two branches with distinct orders and confirm a branch-A user cannot read branch-B data by changing browser state or query parameters.
 
-## Latest CI follow-up (2026-10-26)
+## Latest CI follow-up (2026-10-27)
 
-- Latest completed Phase 12 workflow run #41: typecheck **passed**, build **passed**, lint **failed**.
-- The branch-relation type mismatch is fixed. The reports page no longer has lint errors; one non-blocking unused-index warning remains.
-- Lint still fails on existing errors in billing, inventory, kitchen, orders, POS, suppliers and tables, primarily `no-explicit-any` and `react-hooks/set-state-in-effect`.
+- Latest completed Phase 12 quality workflow run #80: typecheck **passed**, lint **passed**, and build **passed**.
+- Netlify deploy preview for PR #2: **success**.
+- The lint/type issues in billing, inventory, kitchen, orders, POS, suppliers and tables were fixed with explicit row/response types and deferred effect initialization; the reports card map no longer has an unused-index warning.
 - CI build uses non-secret placeholder Supabase public environment values for compilation only. Multi-branch RLS, pagination reconciliation and date-window tests remain unverified in staging.
 
 ## Completion criteria
