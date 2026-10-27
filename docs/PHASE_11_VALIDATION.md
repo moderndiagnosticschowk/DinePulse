@@ -19,10 +19,11 @@ This is a forward-only migration and intentionally does not rewrite old migratio
 
 Run it only against a disposable/staging Supabase database **after** migration 0011. It has not been executed in this run and does not replace behavioral integration tests.
 
-## Latest CI follow-up (2026-10-26)
+## Latest CI follow-up (2026-10-27)
 
-- Latest completed Phase 11 workflow run #40: typecheck **passed**, build **passed**, lint **failed**.
-- Lint now loads under Next.js 16's native flat config, but reports existing web-app errors in billing, inventory, kitchen, orders, POS, suppliers and tables (mainly `no-explicit-any` and `react-hooks/set-state-in-effect`).
+- Latest completed Phase 11 quality workflow run #79: typecheck **passed**, lint **passed**, and build **passed**.
+- Netlify deploy preview for PR #1: **success**.
+- The lint/type issues in billing, inventory, kitchen, orders, POS, suppliers and tables were fixed with explicit row/response types and deferred effect initialization.
 - CI build uses non-secret placeholder Supabase public environment values; these are for compilation only and are not deployment credentials.
 - Read-only SQL contract assertions are committed but **not executed**. No Supabase development branches are listed, and no staging database migration or behavioral inventory tests have been run.
 
