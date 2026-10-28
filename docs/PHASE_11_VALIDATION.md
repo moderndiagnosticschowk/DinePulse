@@ -4,6 +4,7 @@
 - Preserve the live database RPC names, argument signatures, and return types.
 - Require an authenticated branch member with an allowed inventory-management role inside each stock-mutating RPC, not only in Express middleware.
 - Reject invalid movement types, zero quantities, cross-branch inventory IDs, and stock reductions below zero.
+- Enforce signed quantity consistency in both API and RPC: PURCHASE/ADJUSTMENT_IN require positive quantities; SALE/WASTE/ADJUSTMENT_OUT require negative quantities. RETURN remains direction-flexible pending confirmed product semantics.
 - Enforce movement sign consistency in both API and RPC: PURCHASE/ADJUSTMENT_IN require positive quantities; SALE/WASTE/ADJUSTMENT_OUT require negative quantities. RETURN remains direction-flexible pending confirmed product semantics.
 - Make order stock consumption retry-safe with a durable ledger, including orders with no recipe ingredients.
 - Backfill the ledger marker when legacy `ORDER` or `ORDER_CONSUMPTION` movement rows already exist.
@@ -52,6 +53,10 @@ Run it only against a disposable/staging Supabase database **after** migration 0
 - No Supabase development branches are currently listed for the project, so staging validation remains blocked unless a disposable/staging database is provided.
 - The production migration history currently lists only two migration records despite later schema objects being present. Do not blindly replay historical migrations.
 - The security advisor still reports six SECURITY DEFINER functions callable by `anon` and/or `authenticated`, two mutable function search paths, and disabled leaked-password protection. These findings require function-by-function review; do not blindly revoke grants because onboarding and membership helper behavior may depend on them.
+
+## Update (2026-10-28)
+- Added API and SQL guards to reject movement signs that contradict PURCHASE, ADJUSTMENT_IN, SALE, WASTE, and ADJUSTMENT_OUT labels.
+- Added a staging acceptance item for movement direction. The new quality workflow runs are currently in progress; this code has not been tested against PostgreSQL yet.
 
 ## Completion status
 The code-level recipe-less retry gap has been addressed by adding `order_stock_consumptions`, revoking direct table privileges, enabling RLS, validating authentication/branch role in the consumption RPC, and using a fixed search path. The migration, permissions, and API flows have **not** been executed against staging. Phase 11 remains incomplete until the SQL assertions compile and every behavioral checklist item passes.
