@@ -36,6 +36,12 @@ begin
   if p_movement_type is null or p_movement_type not in ('PURCHASE','SALE','WASTE','ADJUSTMENT_IN','ADJUSTMENT_OUT','RETURN') then
     raise exception 'Invalid movement type';
   end if;
+  -- Keep signed quantities consistent with movement labels even for direct RPC calls.
+  -- RETURN remains direction-flexible because it may represent either customer or supplier returns.
+  if (p_movement_type in ('PURCHASE','ADJUSTMENT_IN') and p_quantity < 0)
+    or (p_movement_type in ('SALE','WASTE','ADJUSTMENT_OUT') and p_quantity > 0) then
+    raise exception 'Quantity sign does not match movement type';
+  end if;
 
   select * into v_item
   from public.inventory_items
