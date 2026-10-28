@@ -45,6 +45,14 @@
 - The lint/type issues in billing, inventory, kitchen, orders, POS, suppliers and tables were fixed with explicit row/response types and deferred effect initialization; the reports card map no longer has an unused-index warning.
 - CI build uses non-secret placeholder Supabase public environment values for compilation only. Multi-branch RLS, pagination reconciliation and date-window tests remain unverified in staging.
 
+## Database security preflight
+
+`supabase/tests/phase12_report_security_contracts.sql` checks RLS is enabled on `branch_memberships`, `orders`, `order_items`, and `payments`, plus the expected authenticated SELECT policy names. A read-only query against the current live database on 2026-10-28 found all four RLS flags enabled and all four expected policies present. This is only a schema/policy preflight; it does not prove cross-branch row isolation. The new SQL contract file has not been executed in CI or staging yet.
+
+## Update (2026-10-28)
+- Added the read-only report RLS contract script and documented the distinction between policy presence and behavioral isolation.
+- Quality workflow runs for the new commits are still in progress; two-branch browser tests and report-total reconciliation remain pending.
+
 ## Completion criteria
 Do not mark Phase 12 complete until the three root checks pass and the multi-branch + pagination scenarios pass against staging. A code commit or successful hosting build alone is not end-to-end verification.
 
