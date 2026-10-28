@@ -23,6 +23,10 @@
 - Persist selection under `dinepulse:active-branch-id` and validate it against active memberships before using it.
 - Keep the 7/30/90-day filters, refresh action, loading/error states and empty states.
 
+## Database security preflight
+
+`supabase/tests/phase12_report_security_contracts.sql` is a read-only staging assertion that checks RLS is enabled on `branch_memberships`, `orders`, `order_items`, and `payments`, and that the expected authenticated SELECT policies exist. It is a schema/policy contract check only; it does not prove row isolation. Complete the two-user/two-branch browser test below before marking the phase complete.
+
 ## Validation checklist
 1. Single-branch user sees reports without needing to select a branch.
 2. Multi-branch user can switch branches; all KPI, daily trend, best-seller, payment-mix and recent-order values change to the selected branch.
