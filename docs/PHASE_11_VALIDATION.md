@@ -4,6 +4,7 @@
 - Preserve the live database RPC names, argument signatures, and return types.
 - Require an authenticated branch member with an allowed inventory-management role inside each stock-mutating RPC, not only in Express middleware.
 - Reject invalid movement types, zero quantities, cross-branch inventory IDs, and stock reductions below zero.
+- Enforce movement sign consistency in both API and RPC: PURCHASE/ADJUSTMENT_IN require positive quantities; SALE/WASTE/ADJUSTMENT_OUT require negative quantities. RETURN remains direction-flexible pending confirmed product semantics.
 - Make order stock consumption retry-safe with a durable ledger, including orders with no recipe ingredients.
 - Backfill the ledger marker when legacy `ORDER` or `ORDER_CONSUMPTION` movement rows already exist.
 - Add the missing `create_purchase` RPC contract used by the API.
