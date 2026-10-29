@@ -27,6 +27,19 @@ begin
     raise exception 'consume_order_stock signature/return contract mismatch';
   end if;
 
+  -- Billing can be performed by a cashier, but stock must only be consumed for paid orders.
+  -- This source-contract assertion complements, but does not replace, behavioral tests.
+  if position('v_order.status <> ''paid''' in lower(pg_get_functiondef(
+    'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
+  ))) = 0 then
+    raise exception 'consume_order_stock must reject unpaid orders';
+  end if;
+  if position('cashier' in lower(pg_get_functiondef(
+    'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
+  ))) = 0 then
+    raise exception 'consume_order_stock must support authorized cashier billing';
+  end if;
+
   if to_regclass('public.order_stock_consumptions') is null then
     raise exception 'order_stock_consumptions ledger table is missing';
   end if;
