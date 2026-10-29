@@ -11,6 +11,7 @@ type OrderRow = {
   order_type: string;
   grand_total: number | string;
   created_at: string;
+  paid_at: string | null;
 };
 type ItemRow = { order_id: string; item_name: string; quantity: number | string; line_total: number | string };
 type PaymentRow = { order_id: string; payment_method: string; amount: number | string; status: string };
@@ -22,6 +23,7 @@ const money = (value: number) => new Intl.NumberFormat('en-IN', { style: 'curren
 export default function ReportsPage() {
   const [range, setRange] = useState<7 | 30 | 90>(7);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [salesOrders, setSalesOrders] = useState<OrderRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
@@ -36,6 +38,7 @@ export default function ReportsPage() {
     setLoading(true);
     setError('');
     setOrders([]);
+    setSalesOrders([]);
     setItems([]);
     setPayments([]);
     try {
@@ -43,15 +46,17 @@ export default function ReportsPage() {
       const from = new Date(to);
       from.setHours(0, 0, 0, 0);
       from.setDate(from.getDate() - (range - 1));
+      const fromIso = from.toISOString();
+      const toIso = to.toISOString();
       const pageSize = 500;
       const rows: OrderRow[] = [];
       for (let offset = 0; ; offset += pageSize) {
         const { data, error: ordersError } = await supabase
           .from('orders')
-          .select('id,order_number,status,order_type,grand_total,created_at')
+          .select('id,order_number,status,order_type,grand_total,created_at,paid_at')
           .eq('branch_id', branchId)
-          .gte('created_at', from.toISOString())
-          .lte('created_at', to.toISOString())
+          .gte('created_at', fromIso)
+          .lte('created_at', toIso)
           .order('created_at', { ascending: false })
           .order('id', { ascending: true })
           .range(offset, offset + pageSize - 1);
@@ -61,9 +66,32 @@ export default function ReportsPage() {
         if (page.length < pageSize) break;
       }
       if (requestId !== loadRequestRef.current) return;
-      const paidIds = rows.filter(order => order.status === 'PAID').map(order => order.id);
+
+      // Sales are attributed to payment time, not order creation time. An order
+      // created yesterday but paid today belongs in today's sales report.
+      const paidRows: OrderRow[] = [];
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error: paidOrdersError } = await supabase
+          .from('orders')
+          .select('id,order_number,status,order_type,grand_total,created_at,paid_at')
+          .eq('branch_id', branchId)
+          .eq('status', 'PAID')
+          .gte('paid_at', fromIso)
+          .lte('paid_at', toIso)
+          .order('paid_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (paidOrdersError) throw paidOrdersError;
+        const page = (data ?? []) as OrderRow[];
+        paidRows.push(...page);
+        if (page.length < pageSize) break;
+      }
+      if (requestId !== loadRequestRef.current) return;
+
+      const paidIds = paidRows.map(order => order.id);
       if (!paidIds.length) {
         setOrders(rows);
+        setSalesOrders([]);
         setItems([]);
         setPayments([]);
         return;
@@ -89,6 +117,7 @@ export default function ReportsPage() {
       }
       if (requestId !== loadRequestRef.current) return;
       setOrders(rows);
+      setSalesOrders(paidRows);
       setItems(itemRows);
       setPayments(paymentRows);
     } catch (e) {
@@ -155,7 +184,7 @@ export default function ReportsPage() {
   }, [load, branchId]);
 
 
-  const paidOrders = useMemo(() => orders.filter(order => order.status === 'PAID'), [orders]);
+  const paidOrders = useMemo(() => salesOrders, [salesOrders]);
   const sales = paidOrders.reduce((sum, order) => sum + Number(order.grand_total), 0);
   const averageBill = paidOrders.length ? sales / paidOrders.length : 0;
   const openOrders = orders.filter(order => ['OPEN', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'SERVED'].includes(order.status)).length;
@@ -168,7 +197,7 @@ export default function ReportsPage() {
       day.setHours(0, 0, 0, 0);
       day.setDate(day.getDate() - offset);
       const key = day.toLocaleDateString('en-CA');
-      const matching = paidOrders.filter(order => new Date(order.created_at).toLocaleDateString('en-CA') === key);
+      const matching = paidOrders.filter(order => order.paid_at !== null && new Date(order.paid_at).toLocaleDateString('en-CA') === key);
       result.push({
         label: day.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
         sales: matching.reduce((sum, order) => sum + Number(order.grand_total), 0),
@@ -284,7 +313,7 @@ export default function ReportsPage() {
             </section>
 
             <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div><h2 className="text-lg font-black">Best-selling items</h2><p className="mt-1 text-sm text-slate-500">Ranked by quantity across orders in the selected period.</p></div>
+              <div><h2 className="text-lg font-black">Best-selling items</h2><p className="mt-1 text-sm text-slate-500">Ranked by quantity across orders paid in the selected period.</p></div>
               {topItems.length ? <div className="mt-5 space-y-4">{topItems.map((item, index) => <div key={item.name}><div className="mb-1.5 flex flex-wrap justify-between gap-2 text-sm"><span className="font-semibold">{index + 1}. {item.name}</span><span className="text-slate-500">{item.quantity} sold · {money(item.sales)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-900" style={{ width: `${item.quantity / maxItemQty * 100}%` }} /></div></div>)}</div> : <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No order items found in this period.</p>}
             </section>
 
