@@ -33,25 +33,28 @@
 3. A saved branch ID that is no longer an active membership falls back to an allowed branch.
 4. A user with no active branch sees the no-membership message; signed-out users see the sign-in message.
 5. Seed more than 500 orders and more than 500 order items/payment rows; verify pagination includes all matching rows exactly once. Verify orders timestamped after the report's captured end time are excluded.
-6. Verify open, unpaid and cancelled orders do not contribute to best-seller ranking or completed payment mix; paid sales totals reconcile with paid orders.
-7. Test 7, 30 and 90 days, empty periods, refresh, slow responses and query errors. Rapidly switch branches/ranges while a request is in flight and confirm stale responses cannot overwrite the latest selection.
-8. Run root `npm run typecheck`, `npm run lint`, and `npm run build`.
-9. In staging, use two branches with distinct orders and confirm a branch-A user cannot read branch-B data by changing browser state or query parameters.
+6. Attribute sales and daily trend to `paid_at`, not `created_at`: include an older order paid inside the selected window, and exclude an order created inside the window but paid after its end. Keep Recent Orders based on `created_at`.
+7. Verify open, unpaid and cancelled orders do not contribute to best-seller ranking or completed payment mix; paid sales totals reconcile with paid orders.
+8. Test 7, 30 and 90 days, empty periods, refresh, slow responses and query errors. Rapidly switch branches/ranges while a request is in flight and confirm stale responses cannot overwrite the latest selection.
+9. Run root `npm run typecheck`, `npm run lint`, and `npm run build`.
+10. In staging, use two branches with distinct orders and confirm a branch-A user cannot read branch-B data by changing browser state or query parameters.
 
-## Latest CI follow-up (2026-10-27)
+## Latest completed CI (2026-10-29)
 
-- Latest completed Phase 12 quality workflow run #80: typecheck **passed**, lint **passed**, and build **passed**.
-- Netlify deploy preview for PR #2: **success**.
-- The lint/type issues in billing, inventory, kitchen, orders, POS, suppliers and tables were fixed with explicit row/response types and deferred effect initialization; the reports card map no longer has an unused-index warning.
+- Quality workflow run #96 for commit `9cf58d679c48a09364fb8ca2038f4482be9c3f05`: typecheck **passed**, lint **passed**, and build **passed**.
+- The report now separates orders created in the selected period (recent orders/open-order count) from orders paid in the selected period (sales, daily trend, best sellers and payment mix), using `paid_at` for sales attribution.
+- The `paid_at` change is a new commit and still needs its own CI result.
+- Netlify's deploy-preview comment for PR #2 reports the preview was **cancelled**; do not treat it as a successful preview.
 - CI build uses non-secret placeholder Supabase public environment values for compilation only. Multi-branch RLS, pagination reconciliation and date-window tests remain unverified in staging.
 
 ## Database security preflight
 
 `supabase/tests/phase12_report_security_contracts.sql` checks RLS is enabled on `branch_memberships`, `orders`, `order_items`, and `payments`, plus the expected authenticated SELECT policy names. A read-only query against the current live database on 2026-10-28 found all four RLS flags enabled and all four expected policies present. This is only a schema/policy preflight; it does not prove cross-branch row isolation. The new SQL contract file has not been executed in CI or staging yet.
 
-## Update (2026-10-28)
+## Update (2026-10-29)
 - Added the read-only report RLS contract script and documented the distinction between policy presence and behavioral isolation.
-- Quality workflow runs for the new commits are still in progress; two-branch browser tests and report-total reconciliation remain pending.
+- Corrected sales attribution to use payment time (`paid_at`) while keeping the Recent Orders list based on creation time (`created_at`).
+- The newest code commit's quality run is pending. Two-branch browser tests, pagination reconciliation, date-window boundaries and report-total reconciliation remain pending.
 
 ## Completion criteria
 Do not mark Phase 12 complete until the three root checks pass and the multi-branch + pagination scenarios pass against staging. A code commit or successful hosting build alone is not end-to-end verification.
