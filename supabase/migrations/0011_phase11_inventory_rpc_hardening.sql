@@ -286,7 +286,7 @@ begin
   end if;
   if not public.user_has_branch_role(
     p_branch_id,
-    array['OWNER','ADMIN','MANAGER','INVENTORY_MANAGER']::public.membership_role[]
+    array['OWNER','ADMIN','MANAGER','CASHIER','INVENTORY_MANAGER']::public.membership_role[]
   ) then
     raise exception 'Order stock permission required' using errcode = '42501';
   end if;
@@ -318,6 +318,12 @@ begin
     return 0;
   end if;
 
+  -- Stock may only be consumed after the order is paid. Cashiers can invoke this
+  -- guarded RPC from billing, but cannot call the general inventory adjustment RPC.
+  if v_order.status <> 'PAID' then
+    raise exception 'Only paid orders can consume stock' using errcode = '55000';
+  end if;
+
   for v_order_item in
     select oi.menu_item_id, oi.quantity
     from public.order_items oi
@@ -337,8 +343,25 @@ begin
       end if;
 
       v_needed := (v_ingredient.quantity / v_ingredient.yield_quantity) * v_order_item.quantity;
-      perform public.adjust_inventory_stock(
-        p_branch_id, v_ingredient.inventory_item_id, -v_needed, 'SALE',
+      -- Perform the order-linked deduction here rather than calling the general
+      -- adjustment RPC: CASHIER may consume stock for a paid order, but must not
+      -- gain permission to make arbitrary inventory adjustments.
+      update public.inventory_items
+      set current_stock = current_stock - v_needed, updated_at = now()
+      where id = v_ingredient.inventory_item_id
+        and branch_id = p_branch_id
+        and is_active = true
+        and current_stock >= v_needed;
+      if not found then
+        raise exception 'Insufficient stock or inactive inventory item';
+      end if;
+
+      insert into public.stock_movements(
+        branch_id, inventory_item_id, movement_type, quantity,
+        reference_type, reference_id, notes, created_by
+      )
+      values (
+        p_branch_id, v_ingredient.inventory_item_id, 'SALE', -v_needed,
         'ORDER', p_order_id, 'Recipe consumption', v_actor
       );
       v_count := v_count + 1;
