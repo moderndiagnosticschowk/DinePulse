@@ -28,7 +28,6 @@ begin
   end if;
 
   -- Billing can be performed by a cashier, but stock must only be consumed for paid orders.
-  -- This source-contract assertion complements, but does not replace, behavioral tests.
   if position('v_order.status <> ''paid''' in lower(pg_get_functiondef(
     'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
   ))) = 0 then
@@ -77,6 +76,19 @@ begin
     or not has_function_privilege('authenticated', 'public.receive_purchase(uuid,uuid,uuid)', 'EXECUTE')
     or not has_function_privilege('authenticated', 'public.consume_order_stock(uuid,uuid,uuid)', 'EXECUTE') then
     raise exception 'authenticated must retain execute privileges on the four guarded RPCs';
+  end if;
+
+  -- The concurrent create_purchase retry path depends on this branch-scoped unique key.
+  if not exists (
+    select 1
+    from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'purchases'
+      and indexdef ilike 'CREATE UNIQUE INDEX%'
+      and position('(branch_id, idempotency_key)' in indexdef) > 0
+      and indexdef ilike '%WHERE (idempotency_key IS NOT NULL)%'
+  ) then
+    raise exception 'purchases requires a unique branch_id/idempotency_key index';
   end if;
 end;
 $$;
