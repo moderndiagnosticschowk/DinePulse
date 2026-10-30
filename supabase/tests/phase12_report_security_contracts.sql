@@ -1,7 +1,7 @@
--- Phase 12 report security preflight.
--- Run read-only against staging before branch-isolation browser tests.
--- This checks RLS is enabled and the expected SELECT policy contracts exist;
--- it does NOT replace tests using real users from two separate branches.
+-- Phase 12 report security/performance preflight.
+-- Run read-only against staging after migration 0012 and before branch-isolation browser tests.
+-- This checks RLS, expected SELECT policy contracts, payment timestamp availability,
+-- and the indexes used by report date filters/pagination. It does NOT prove row isolation.
 
 do $$
 declare
@@ -9,6 +9,7 @@ declare
   v_rls boolean;
   v_policy_count integer;
   v_expected record;
+  v_index text;
 begin
   foreach v_table in array array['branch_memberships','orders','order_items','payments'] loop
     select c.relrowsecurity
@@ -43,7 +44,25 @@ begin
         v_expected.tablename, v_expected.policyname;
     end if;
   end loop;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'payments' and column_name = 'paid_at'
+  ) then
+    raise exception 'payments.paid_at is required for period-correct payment mix';
+  end if;
+
+  foreach v_index in array array[
+    'idx_orders_branch_created_report',
+    'idx_orders_branch_paid_at_report',
+    'idx_order_items_order_report',
+    'idx_payments_paid_at_report'
+  ] loop
+    if to_regclass('public.' || v_index) is null then
+      raise exception 'Required report index public.% is missing', v_index;
+    end if;
+  end loop;
 end;
 $$;
 
-select 'Phase 12 report RLS preflight passed' as result;
+select 'Phase 12 report RLS and index preflight passed' as result;
