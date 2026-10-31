@@ -6,6 +6,8 @@ do $$
 declare
   v_proc regprocedure;
   v_rls_enabled boolean;
+  v_security_definer boolean;
+  v_function_config text;
 begin
   v_proc := to_regprocedure('public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)');
   if v_proc is null or (select prorettype from pg_proc where oid = v_proc) <> 'public.stock_movements'::regtype then
@@ -90,7 +92,57 @@ begin
   ) then
     raise exception 'purchases requires a unique branch_id/idempotency_key index';
   end if;
+
+  -- Direct RPC calls must not bypass the signed-quantity rules enforced by the API.
+  if position('p_quantity < 0' in lower(pg_get_functiondef(
+    'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)'::regprocedure
+  ))) = 0
+    or position('p_quantity > 0' in lower(pg_get_functiondef(
+      'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)'::regprocedure
+    ))) = 0 then
+    raise exception 'adjust_inventory_stock must enforce movement direction in SQL';
+  end if;
+
+  -- General adjustment stays SECURITY INVOKER; only the ledger-owning order RPC
+  -- is SECURITY DEFINER, and it must pin search_path to trusted schemas.
+  select prosecdef, coalesce(array_to_string(proconfig, ','), '')
+    into v_security_definer, v_function_config
+  from pg_proc
+  where oid = 'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)'::regprocedure;
+  if coalesce(v_security_definer, true) then
+    raise exception 'adjust_inventory_stock must remain SECURITY INVOKER';
+  end if;
+
+  select prosecdef, replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')
+    into v_security_definer, v_function_config
+  from pg_proc
+  where oid = 'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure;
+  if not coalesce(v_security_definer, false)
+    or position('search_path=pg_catalog,public' in v_function_config) = 0 then
+    raise exception 'consume_order_stock must be SECURITY DEFINER with a fixed trusted search_path';
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.order_stock_consumptions'::regclass
+      and contype = 'p'
+      and pg_get_constraintdef(oid) = 'PRIMARY KEY (order_id)'
+  ) then
+    raise exception 'order_stock_consumptions.order_id must be the primary key';
+  end if;
+
+  if position('left(p_notes, 500), v_actor' in lower(pg_get_functiondef(
+    'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)'::regprocedure
+  ))) = 0 then
+    raise exception 'adjust_inventory_stock must write auth.uid()-derived v_actor as created_by';
+  end if;
+  if position('received_by = v_actor' in lower(pg_get_functiondef(
+    'public.receive_purchase(uuid,uuid,uuid)'::regprocedure
+  ))) = 0 then
+    raise exception 'receive_purchase must write auth.uid()-derived v_actor as received_by';
+  end if;
+
 end;
-$$;
+$;
 
 select 'Phase 11 database contract assertions passed' as result;
