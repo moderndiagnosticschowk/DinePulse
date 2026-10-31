@@ -58,3 +58,15 @@ Do not mark Phase 12 complete until the current code checks pass, migration 0012
 
 ## Known limitation
 Pagination prevents silent truncation, but this page still aggregates report data in the browser. For very high-volume branches, a server-side aggregate RPC with explicit date/branch filters and reconciliation tests should replace client-side aggregation in a later phase.
+
+
+## Daily verification update (2026-10-31)
+- Latest PR-head GitHub Actions run #41002957138 completed successfully: root typecheck, ESLint, and production build passed.
+- Read-only live schema inspection confirmed orders.created_at, orders.paid_at, payments.paid_at, payment/order status fields, and the current live branch-scoped/report-related indexes.
+- The four indexes introduced by migration 0012 are not yet confirmed in production; migration 0012 was not applied.
+- The SQL preflight now checks required timestamp/status columns, RLS and policy contracts, index validity, and expected index column/predicate definitions. It has not yet been executed against staging.
+- The live RLS/policy catalog confirms expected policies exist, but catalog checks alone do not prove Branch A cannot read Branch B rows.
+- No Supabase staging branch exists. Creating one may incur compute charges and is intentionally not done automatically.
+
+## Remaining acceptance gates
+Run migration 0012 and the expanded SQL preflight on a disposable schema-matched staging database; then execute two-user/two-branch row-isolation tests, 500+ row pagination reconciliation, partial-payment transaction-time attribution, date-boundary checks, and EXPLAIN (ANALYZE, BUFFERS) comparisons. Keep the PR draft until all pass.
