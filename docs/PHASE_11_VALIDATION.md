@@ -71,3 +71,14 @@ The code-level recipe-less retry gap has been addressed by adding `order_stock_c
 - Added a read-only contract assertion for the branch-scoped unique purchase idempotency index. The live database has `uq_purchases_branch_idempotency`, so the migration's concurrent retry path has the required uniqueness primitive on the inspected project.
 - Latest completed quality runs #108 (before the SQL assertion update) passed typecheck, lint, and build. The new test commit's workflow is pending.
 - The ledger table and `create_purchase` RPC remain absent from production; migration 0011 is still not applied. Phase 11 remains incomplete pending staging migration, SQL assertions, and behavioral tests.
+
+
+## Daily verification update (2026-10-31)
+- Latest PR-head GitHub Actions run #41002953671 completed successfully: root typecheck, ESLint, and production build passed.
+- Read-only live schema inspection reconfirmed the branch-scoped unique purchase idempotency index and the live purchases / purchase_items columns referenced by migration 0011.
+- Production still does not have order_stock_consumptions or the proposed create_purchase RPC; migration history still contains only two records. No migration was applied.
+- Expanded SQL contract assertions now also check movement-direction enforcement, SECURITY INVOKER/DEFINER boundaries, the fixed search path on the ledger RPC, the ledger primary key, and audit actor attribution. The updated SQL test has not yet run against PostgreSQL.
+- No Supabase staging branch exists. Creating one may incur compute charges and is intentionally not done automatically.
+
+## Additional billing consistency blocker
+The current apps/web/app/billing/page.tsx performs three separate client-side writes: insert a payment, update the order to PAID, then call consume_order_stock. These are not one database transaction. If a later step fails, the database can retain a payment/order state without the corresponding stock ledger update; a retry can also create another payment because payments has no payment idempotency key in the inspected live schema. Treat this as a release blocker for cashier billing. Before production rollout, replace the sequence with a reviewed transactional settlement RPC/API that locks the order, validates the outstanding amount and payment method, records an idempotent payment, marks the order paid only when fully settled, and consumes stock in the same transaction. Do not patch the order of the three client writes as a substitute for atomicity.
