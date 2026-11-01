@@ -29,6 +29,11 @@ begin
     raise exception 'consume_order_stock signature/return contract mismatch';
   end if;
 
+  v_proc := to_regprocedure('public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)');
+  if v_proc is null or (select prorettype from pg_proc where oid = v_proc) <> 'jsonb'::regtype then
+    raise exception 'settle_order_payment signature/return contract mismatch';
+  end if;
+
   -- Billing can be performed by a cashier, but stock must only be consumed for paid orders.
   if position('v_order.status <> ''paid''' in lower(pg_get_functiondef(
     'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
@@ -66,7 +71,8 @@ begin
     raise exception 'authenticated must not have direct privileges on order_stock_consumptions';
   end if;
 
-  if has_function_privilege('anon', 'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)', 'EXECUTE')
+  if has_function_privilege('anon', 'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)', 'EXECUTE')
     or has_function_privilege('anon', 'public.create_purchase(uuid,uuid,uuid,text,date,numeric,text,numeric,text,jsonb,text)', 'EXECUTE')
     or has_function_privilege('anon', 'public.receive_purchase(uuid,uuid,uuid)', 'EXECUTE')
     or has_function_privilege('anon', 'public.consume_order_stock(uuid,uuid,uuid)', 'EXECUTE') then
@@ -101,6 +107,66 @@ begin
       'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)'::regprocedure
     ))) = 0 then
     raise exception 'adjust_inventory_stock must enforce movement direction in SQL';
+  end if;
+
+  -- The stock_movements schema stores positive magnitudes; signed inputs affect stock,
+  -- while movement_type identifies the direction. This prevents the live CHECK from failing.
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.stock_movements'::regclass
+      and conname = 'stock_movements_quantity_check'
+      and contype = 'c'
+  ) then
+    raise exception 'stock_movements positive-quantity constraint is missing';
+  end if;
+  if position('abs(p_quantity)' in lower(pg_get_functiondef(
+    'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)'::regprocedure
+  ))) = 0 then
+    raise exception 'adjust_inventory_stock must persist positive movement magnitudes';
+  end if;
+  if position('v_needed' in lower(pg_get_functiondef(
+    'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
+  ))) = 0 or position('-v_needed' in lower(pg_get_functiondef(
+    'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
+  ))) > 0 then
+    raise exception 'consume_order_stock must persist positive movement magnitudes';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'payments' and column_name = 'idempotency_key'
+  ) then
+    raise exception 'payments.idempotency_key is required for safe payment retries';
+  end if;
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and tablename = 'payments'
+      and indexname = 'uq_payments_order_idempotency'
+      and indexdef ilike 'CREATE UNIQUE INDEX%'
+      and position('(order_id, idempotency_key)' in indexdef) > 0
+  ) then
+    raise exception 'payments requires a unique order/idempotency key index';
+  end if;
+
+  select prosecdef, replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')
+    into v_security_definer, v_function_config
+  from pg_proc
+  where oid = 'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)'::regprocedure;
+  if not coalesce(v_security_definer, false)
+    or position('search_path=pg_catalog,public' in v_function_config) = 0 then
+    raise exception 'settle_order_payment must be SECURITY DEFINER with a fixed trusted search_path';
+  end if;
+  if position('for update' in lower(pg_get_functiondef(
+    'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)'::regprocedure
+  ))) = 0
+    or position('consume_order_stock' in lower(pg_get_functiondef(
+      'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)'::regprocedure
+    ))) = 0 then
+    raise exception 'settle_order_payment must lock the order and consume stock in the same transaction';
+  end if;
+  if has_function_privilege('anon', 'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)', 'EXECUTE') then
+    raise exception 'settle_order_payment execution grants are incorrect';
   end if;
 
   -- General adjustment stays SECURITY INVOKER; only the ledger-owning order RPC
