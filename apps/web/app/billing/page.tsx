@@ -107,7 +107,6 @@ export default function BillingPage() {
     }
 
     setPayingOrderId(order.id);
-    setMessage('');
     const storageKey = `dinepulse:payment-idempotency:${order.id}`;
 
     try {
