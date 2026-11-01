@@ -87,7 +87,6 @@ export default function BillingPage() {
       ...order,
       amount_due: Math.max(Number(order.grand_total) - (paidByOrder.get(order.id) ?? 0), 0),
     })) as BillingOrder[]);
-    setMessage('');
   }, []);
 
   useEffect(() => {
@@ -107,6 +106,7 @@ export default function BillingPage() {
     }
 
     setPayingOrderId(order.id);
+    setMessage('');
     const storageKey = `dinepulse:payment-idempotency:${order.id}`;
 
     try {
