@@ -58,12 +58,14 @@ begin
   set current_stock = current_stock + p_quantity, updated_at = now()
   where id = v_item.id;
 
+  -- stock_movements.quantity is constrained to a positive magnitude; direction is
+  -- represented by movement_type while the signed input controls the stock delta.
   insert into public.stock_movements(
     branch_id, inventory_item_id, movement_type, quantity,
     reference_type, reference_id, notes, created_by
   )
   values (
-    p_branch_id, v_item.id, p_movement_type::public.stock_movement_type, p_quantity,
+    p_branch_id, v_item.id, p_movement_type::public.stock_movement_type, abs(p_quantity),
     p_reference_type, p_reference_id, left(p_notes, 500), v_actor
   )
   returning * into v_movement;
@@ -361,7 +363,7 @@ begin
         reference_type, reference_id, notes, created_by
       )
       values (
-        p_branch_id, v_ingredient.inventory_item_id, 'SALE', -v_needed,
+        p_branch_id, v_ingredient.inventory_item_id, 'SALE', v_needed,
         'ORDER', p_order_id, 'Recipe consumption', v_actor
       );
       v_count := v_count + 1;
@@ -376,6 +378,161 @@ begin
   return v_count;
 end;
 $$;
+
+
+-- Persist payment retries and settle the order, payment and stock in one transaction.
+alter table public.payments
+  add column if not exists idempotency_key text;
+
+create unique index if not exists uq_payments_order_idempotency
+  on public.payments(order_id, idempotency_key)
+  where idempotency_key is not null;
+
+create or replace function public.settle_order_payment(
+  p_order_id uuid,
+  p_branch_id uuid,
+  p_payment_method public.payment_method,
+  p_idempotency_key text,
+  p_amount numeric default null,
+  p_reference_number text default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $
+declare
+  v_actor uuid := auth.uid();
+  v_order public.orders%rowtype;
+  v_existing public.payments%rowtype;
+  v_payment public.payments%rowtype;
+  v_paid_before numeric(12,2) := 0;
+  v_paid_after numeric(12,2) := 0;
+  v_due numeric(12,2) := 0;
+  v_amount numeric(12,2) := 0;
+  v_stock_count integer := 0;
+  v_is_paid boolean := false;
+begin
+  if v_actor is null then
+    raise exception 'Authentication required' using errcode = '42501';
+  end if;
+  if p_payment_method is null then
+    raise exception 'Payment method is required';
+  end if;
+  if p_idempotency_key is null
+    or length(trim(p_idempotency_key)) < 8
+    or length(p_idempotency_key) > 100 then
+    raise exception 'A valid payment idempotency key is required';
+  end if;
+  if p_amount is not null and p_amount <= 0 then
+    raise exception 'Payment amount must be positive';
+  end if;
+  if not public.user_has_branch_role(
+    p_branch_id,
+    array['OWNER','ADMIN','MANAGER','CASHIER']::public.membership_role[]
+  ) then
+    raise exception 'Billing permission required' using errcode = '42501';
+  end if;
+
+  -- Locking the order serializes all payment attempts for this order.
+  select * into v_order
+  from public.orders
+  where id = p_order_id and branch_id = p_branch_id
+  for update;
+  if not found then
+    raise exception 'Order not found in this branch';
+  end if;
+
+  -- A retry after a lost HTTP response returns the original payment.
+  select * into v_existing
+  from public.payments
+  where order_id = p_order_id and idempotency_key = p_idempotency_key;
+  if found then
+    if v_existing.payment_method <> p_payment_method
+      or (p_amount is not null and v_existing.amount <> p_amount) then
+      raise exception 'Payment idempotency key was reused with different details'
+        using errcode = '22023';
+    end if;
+    select coalesce(sum(amount), 0)::numeric(12,2)
+      into v_paid_after
+    from public.payments
+    where order_id = p_order_id and status = 'COMPLETED';
+    return jsonb_build_object(
+      'payment', to_jsonb(v_existing),
+      'duplicate', true,
+      'paid', v_order.status = 'PAID',
+      'remaining_amount', greatest(v_order.grand_total - v_paid_after, 0),
+      'stock_movements', 0
+    );
+  end if;
+
+  if v_order.status in ('CANCELLED','REFUNDED') then
+    raise exception 'Cancelled or refunded orders cannot be settled';
+  end if;
+  if v_order.status = 'PAID' then
+    return jsonb_build_object(
+      'payment', null,
+      'duplicate', true,
+      'paid', true,
+      'remaining_amount', 0,
+      'stock_movements', 0
+    );
+  end if;
+
+  select coalesce(sum(amount), 0)::numeric(12,2)
+    into v_paid_before
+  from public.payments
+  where order_id = p_order_id and status = 'COMPLETED';
+
+  v_due := greatest(v_order.grand_total - v_paid_before, 0);
+  if v_due > 0 then
+    v_amount := coalesce(p_amount, v_due);
+    if v_amount <= 0 or v_amount > v_due then
+      raise exception 'Payment amount exceeds the outstanding balance';
+    end if;
+
+    insert into public.payments(
+      order_id, payment_method, amount, reference_number,
+      status, paid_at, received_by, idempotency_key
+    )
+    values (
+      p_order_id, p_payment_method, v_amount, nullif(trim(p_reference_number), ''),
+      'COMPLETED', now(), v_actor, p_idempotency_key
+    )
+    returning * into v_payment;
+  elsif p_amount is not null and p_amount > 0 then
+    raise exception 'No outstanding balance remains';
+  end if;
+
+  select coalesce(sum(amount), 0)::numeric(12,2)
+    into v_paid_after
+  from public.payments
+  where order_id = p_order_id and status = 'COMPLETED';
+
+  if v_paid_after >= v_order.grand_total then
+    update public.orders
+    set status = 'PAID',
+        paid_at = coalesce(paid_at, now()),
+        closed_by = v_actor,
+        updated_at = now()
+    where id = p_order_id and branch_id = p_branch_id;
+
+    -- Any stock failure aborts this transaction, including the payment insert.
+    v_stock_count := public.consume_order_stock(p_order_id, p_branch_id, v_actor);
+    v_is_paid := true;
+  end if;
+
+  return jsonb_build_object(
+    'payment', case when v_payment.id is null then null else to_jsonb(v_payment) end,
+    'duplicate', false,
+    'paid', v_is_paid,
+    'remaining_amount', greatest(v_order.grand_total - v_paid_after, 0),
+    'stock_movements', v_stock_count
+  );
+end;
+$;
+
+revoke all on function public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text) from public, anon;
+grant execute on function public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text) to authenticated;
 
 -- Remove direct anonymous/public execution. Authenticated calls pass explicit
 -- per-function branch-role checks; ledger table access is only through the guarded RPC.
