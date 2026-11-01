@@ -88,6 +88,7 @@ The current apps/web/app/billing/page.tsx performs three separate client-side wr
 - Added `payments.idempotency_key` and a unique `(order_id, idempotency_key)` index.
 - Added `settle_order_payment`, a SECURITY DEFINER RPC with a fixed search_path. It locks the order, validates branch role and outstanding balance, writes the payment, marks the order PAID only when fully settled, and invokes stock consumption in the same transaction.
 - Replaced the billing page's three separate client-side writes with the settlement RPC. The UI now shows the outstanding balance, uses the active saved branch when valid, disables duplicate clicks, and reuses a session idempotency key after an uncertain request.
+- The settlement RPC also checks already-PAID legacy orders through the retry-safe stock-consumption ledger/legacy movement guard, allowing missing stock consumption to be repaired without a duplicate deduction.
 - Added SQL contract assertions for positive movement magnitudes, the stock movement CHECK constraint, payment idempotency, settlement RPC signature/grants, order locking and atomic stock invocation.
 - Latest previously completed PR-head CI runs #123 and #126 passed typecheck, ESLint and production build. The commits made in this update still require their own CI runs.
 - No production migration or deployment was performed. The new migration changes have not been executed against staging; Phase 11 remains incomplete pending PostgreSQL contract and behavioral tests.
