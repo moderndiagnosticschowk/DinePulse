@@ -469,12 +469,15 @@ begin
     raise exception 'Cancelled or refunded orders cannot be settled';
   end if;
   if v_order.status = 'PAID' then
+    -- Repair a legacy paid order whose old client-side billing flow missed stock.
+    -- The consumption ledger and legacy movement guard make this retry-safe.
+    v_stock_count := public.consume_order_stock(p_order_id, p_branch_id, v_actor);
     return jsonb_build_object(
       'payment', null,
       'duplicate', true,
       'paid', true,
       'remaining_amount', 0,
-      'stock_movements', 0
+      'stock_movements', v_stock_count
     );
   end if;
 
