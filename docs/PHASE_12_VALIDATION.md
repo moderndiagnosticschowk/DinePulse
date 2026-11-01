@@ -70,3 +70,10 @@ Pagination prevents silent truncation, but this page still aggregates report dat
 
 ## Remaining acceptance gates
 Run migration 0012 and the expanded SQL preflight on a disposable schema-matched staging database; then execute two-user/two-branch row-isolation tests, 500+ row pagination reconciliation, partial-payment transaction-time attribution, date-boundary checks, and EXPLAIN (ANALYZE, BUFFERS) comparisons. Keep the PR draft until all pass.
+
+## Daily implementation update (2026-11-01)
+- Strengthened the read-only SQL preflight to verify the actual SELECT policy predicates for branch memberships, orders, order items and payments, not just policy names. The required predicates must reference the signed-in user or `user_has_branch_access`.
+- Index checks now require each report index to be both valid and ready, and verify the PAID/COMPLETED partial-index predicates and the payment timestamp non-null predicate.
+- Live catalog inspection confirms the current policy definitions include branch-access checks for orders, order items and payments, and self-membership filtering for memberships. This is catalog evidence only; two-user/two-branch row-isolation tests remain required.
+- Latest existing PR-head quality runs #123 and #126 passed typecheck, ESLint and production build. The new SQL preflight commit still requires its own CI run and staging execution.
+- No report migration was applied to production. Phase 12 remains incomplete until migration 0012, SQL preflight, row-isolation, pagination reconciliation and EXPLAIN/ANALYZE checks pass.
