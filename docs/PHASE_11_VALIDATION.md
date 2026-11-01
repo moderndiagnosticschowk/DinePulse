@@ -82,3 +82,22 @@ The code-level recipe-less retry gap has been addressed by adding `order_stock_c
 
 ## Additional billing consistency blocker
 The current apps/web/app/billing/page.tsx performs three separate client-side writes: insert a payment, update the order to PAID, then call consume_order_stock. These are not one database transaction. If a later step fails, the database can retain a payment/order state without the corresponding stock ledger update; a retry can also create another payment because payments has no payment idempotency key in the inspected live schema. Treat this as a release blocker for cashier billing. Before production rollout, replace the sequence with a reviewed transactional settlement RPC/API that locks the order, validates the outstanding amount and payment method, records an idempotent payment, marks the order paid only when fully settled, and consumes stock in the same transaction. Do not patch the order of the three client writes as a substitute for atomicity.
+
+## Daily implementation update (2026-11-01)
+- Fixed a confirmed live-schema compatibility issue: `stock_movements.quantity` has a CHECK constraint requiring a positive value. The RPCs still accept signed quantities to apply stock deltas, but now persist positive movement magnitudes; `movement_type` identifies the movement category.
+- Added `payments.idempotency_key` and a unique `(order_id, idempotency_key)` index.
+- Added `settle_order_payment`, a SECURITY DEFINER RPC with a fixed search_path. It locks the order, validates branch role and outstanding balance, writes the payment, marks the order PAID only when fully settled, and invokes stock consumption in the same transaction.
+- Replaced the billing page's three separate client-side writes with the settlement RPC. The UI now shows the outstanding balance, uses the active saved branch when valid, disables duplicate clicks, and reuses a session idempotency key after an uncertain request.
+- Added SQL contract assertions for positive movement magnitudes, the stock movement CHECK constraint, payment idempotency, settlement RPC signature/grants, order locking and atomic stock invocation.
+- Latest previously completed PR-head CI runs #123 and #126 passed typecheck, ESLint and production build. The commits made in this update still require their own CI runs.
+- No production migration or deployment was performed. The new migration changes have not been executed against staging; Phase 11 remains incomplete pending PostgreSQL contract and behavioral tests.
+
+## Updated billing acceptance tests
+1. A full payment inserts one completed payment, marks the order PAID, and consumes stock in the same transaction.
+2. A stock failure rolls back the payment insert and order status update.
+3. A repeated request with the same order/idempotency key returns the original payment without inserting another row.
+4. Reusing a key with a different payment method or explicit amount is rejected.
+5. A partial payment records only that amount and leaves the order billable with the correct remaining balance.
+6. The final payment marks the order PAID and consumes stock exactly once.
+7. A retry after a lost response returns the committed result; a cancelled/refunded order cannot be settled.
+8. Concurrent payments for one order serialize on the order row and cannot over-collect beyond the outstanding balance.
