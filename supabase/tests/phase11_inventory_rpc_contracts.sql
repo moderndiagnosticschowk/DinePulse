@@ -124,11 +124,9 @@ begin
   ))) = 0 then
     raise exception 'adjust_inventory_stock must persist positive movement magnitudes';
   end if;
-  if position('v_needed' in lower(pg_get_functiondef(
+  if position('''sale'', v_needed' in lower(pg_get_functiondef(
     'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
-  ))) = 0 or position('-v_needed' in lower(pg_get_functiondef(
-    'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
-  ))) > 0 then
+  ))) = 0 then
     raise exception 'consume_order_stock must persist positive movement magnitudes';
   end if;
 
