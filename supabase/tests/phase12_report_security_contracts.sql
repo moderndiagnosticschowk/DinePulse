@@ -8,10 +8,12 @@ declare
   v_table text;
   v_rls boolean;
   v_policy_count integer;
+  v_policy_qual text;
   v_expected record;
   v_index text;
   v_index_def text;
   v_index_valid boolean;
+  v_index_ready boolean;
 begin
   foreach v_table in array array['branch_memberships','orders','order_items','payments'] loop
     select c.relrowsecurity
@@ -43,6 +45,29 @@ begin
 
     if v_policy_count <> 1 then
       raise exception 'Expected authenticated SELECT policy %.% is missing or changed',
+        v_expected.tablename, v_expected.policyname;
+    end if;
+  end loop;
+
+  -- Check that SELECT policy predicates are branch-scoped, not merely named correctly.
+  for v_expected in
+    select * from (values
+      ('branch_memberships','memberships_select_self','auth.uid'),
+      ('orders','orders_select','user_has_branch_access'),
+      ('order_items','order_items_select','user_has_branch_access'),
+      ('payments','payments_select','user_has_branch_access')
+    ) as expected(tablename, policyname, required_fragment)
+  loop
+    select lower(coalesce(qual, '')) into v_policy_qual
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = v_expected.tablename
+      and policyname = v_expected.policyname
+      and cmd = 'SELECT'
+      and 'authenticated' = any(roles);
+
+    if v_policy_qual is null or position(v_expected.required_fragment in v_policy_qual) = 0 then
+      raise exception 'SELECT policy %.% does not contain the required branch/user predicate',
         v_expected.tablename, v_expected.policyname;
     end if;
   end loop;
@@ -84,13 +109,13 @@ begin
     'idx_order_items_order_report',
     'idx_payments_paid_at_report'
   ] loop
-    select i.indisvalid, pg_get_indexdef(i.indexrelid)
-      into v_index_valid, v_index_def
+    select i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid)
+      into v_index_valid, v_index_ready, v_index_def
     from pg_index i
     where i.indexrelid = to_regclass('public.' || v_index);
 
-    if not coalesce(v_index_valid, false) then
-      raise exception 'Report index public.% exists but is not valid', v_index;
+    if not coalesce(v_index_valid, false) or not coalesce(v_index_ready, false) then
+      raise exception 'Report index public.% exists but is not valid/ready', v_index;
     end if;
   end loop;
 
@@ -103,7 +128,7 @@ begin
   select pg_get_indexdef('public.idx_orders_branch_paid_at_report'::regclass)
     into v_index_def;
   if position('(branch_id, paid_at DESC, id)' in v_index_def) = 0
-    or position('status' in lower(v_index_def)) = 0 then
+    or position('status = ''paid''' in lower(v_index_def)) = 0 then
     raise exception 'Paid-orders index must cover branch_id, paid_at and the PAID predicate';
   end if;
 
@@ -117,7 +142,8 @@ begin
     into v_index_def;
   if position('(paid_at DESC, id)' in v_index_def) = 0
     or position('INCLUDE (order_id, payment_method, amount)' in v_index_def) = 0
-    or position('COMPLETED' in v_index_def) = 0 then
+    or position('status = ''completed''' in lower(v_index_def)) = 0
+    or position('paid_at IS NOT NULL' in v_index_def) = 0 then
     raise exception 'Payment index must cover paid_at, stable id order, selected columns and COMPLETED predicate';
   end if;
 end;
