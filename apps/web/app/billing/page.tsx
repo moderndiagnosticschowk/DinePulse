@@ -18,6 +18,10 @@ type SettlementResult = {
   duplicate: boolean;
   remaining_amount: number | string;
 };
+type PendingPaymentAttempt = {
+  idempotencyKey: string;
+  paymentMethod: PaymentMethod;
+};
 
 const paymentMethods: PaymentMethod[] = ['CASH', 'UPI', 'CARD'];
 
@@ -110,15 +114,45 @@ export default function BillingPage() {
     const storageKey = `dinepulse:payment-idempotency:${order.id}`;
 
     try {
-      // Keep the same key after a timeout/error so a committed payment can be safely retried.
-      const idempotencyKey = sessionStorage.getItem(storageKey) ?? crypto.randomUUID();
-      sessionStorage.setItem(storageKey, idempotencyKey);
+      // Bind the idempotency key to the original method. If the response was lost,
+      // retrying with a different method must not reuse the same key or create ambiguity.
+      const storedAttempt = sessionStorage.getItem(storageKey);
+      let attempt: PendingPaymentAttempt;
+      if (storedAttempt) {
+        let parsed: unknown = null;
+        try {
+          parsed = JSON.parse(storedAttempt);
+        } catch {
+          parsed = null;
+        }
+        if (!parsed || typeof parsed !== 'object') {
+          setMessage('An older payment attempt is unresolved. Verify the payment history before starting another payment.');
+          return;
+        }
+        const candidate = parsed as Partial<PendingPaymentAttempt>;
+        if (typeof candidate.idempotencyKey !== 'string'
+          || !paymentMethods.includes(candidate.paymentMethod as PaymentMethod)) {
+          setMessage('The saved payment attempt is invalid. Verify the payment history before starting another payment.');
+          return;
+        }
+        attempt = {
+          idempotencyKey: candidate.idempotencyKey,
+          paymentMethod: candidate.paymentMethod as PaymentMethod,
+        };
+        if (attempt.paymentMethod !== method) {
+          setMessage(`A previous ${attempt.paymentMethod} payment attempt is unresolved. Retry with ${attempt.paymentMethod}; changing methods with the same key is blocked to prevent duplicate charges.`);
+          return;
+        }
+      } else {
+        attempt = { idempotencyKey: crypto.randomUUID(), paymentMethod: method };
+        sessionStorage.setItem(storageKey, JSON.stringify(attempt));
+      }
 
       const { data, error } = await supabase.rpc('settle_order_payment', {
         p_order_id: order.id,
         p_branch_id: branchId,
-        p_payment_method: method,
-        p_idempotency_key: idempotencyKey,
+        p_payment_method: attempt.paymentMethod,
+        p_idempotency_key: attempt.idempotencyKey,
         p_amount: null,
         p_reference_number: null,
       });
