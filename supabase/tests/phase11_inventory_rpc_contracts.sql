@@ -8,6 +8,7 @@ declare
   v_rls_enabled boolean;
   v_security_definer boolean;
   v_function_config text;
+  v_function record;
 begin
   v_proc := to_regprocedure('public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)');
   if v_proc is null or (select prorettype from pg_proc where oid = v_proc) <> 'public.stock_movements'::regtype then
@@ -33,6 +34,24 @@ begin
   if v_proc is null or (select prorettype from pg_proc where oid = v_proc) <> 'jsonb'::regtype then
     raise exception 'settle_order_payment signature/return contract mismatch';
   end if;
+
+  -- All mutating RPCs use a fixed trusted search_path with pg_catalog first.
+  for v_function in
+    select p.oid::regprocedure as signature, p.proconfig
+    from pg_proc p
+    where p.oid in (
+      'public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)'::regprocedure,
+      'public.create_purchase(uuid,uuid,uuid,text,date,numeric,text,numeric,text,jsonb,text)'::regprocedure,
+      'public.receive_purchase(uuid,uuid,uuid)'::regprocedure,
+      'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure,
+      'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)'::regprocedure
+    )
+  loop
+    v_function_config := replace(coalesce(array_to_string(v_function.proconfig, ','), ''), ' ', '');
+    if position('search_path=pg_catalog,public' in v_function_config) = 0 then
+      raise exception 'Function % must use search_path=pg_catalog,public', v_function.signature;
+    end if;
+  end loop;
 
   -- Billing can be performed by a cashier, but stock must only be consumed for paid orders.
   if position('v_order.status <> ''paid''' in lower(pg_get_functiondef(
