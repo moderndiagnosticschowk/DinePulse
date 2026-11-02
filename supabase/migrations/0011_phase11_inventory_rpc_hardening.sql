@@ -399,7 +399,7 @@ create or replace function public.settle_order_payment(
 language plpgsql
 security definer
 set search_path = pg_catalog, public
-as $
+as $$
 declare
   v_actor uuid := auth.uid();
   v_order public.orders%rowtype;
@@ -532,7 +532,7 @@ begin
     'stock_movements', v_stock_count
   );
 end;
-$;
+$$;
 
 revoke all on function public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text) from public, anon;
 grant execute on function public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text) to authenticated;
