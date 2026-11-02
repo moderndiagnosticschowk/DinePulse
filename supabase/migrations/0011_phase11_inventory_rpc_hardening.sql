@@ -14,7 +14,7 @@ create or replace function public.adjust_inventory_stock(
 ) returns public.stock_movements
 language plpgsql
 security invoker
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   v_item public.inventory_items%rowtype;
@@ -91,7 +91,7 @@ create or replace function public.create_purchase(
 ) returns jsonb
 language plpgsql
 security invoker
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   v_purchase public.purchases%rowtype;
@@ -204,7 +204,7 @@ create or replace function public.receive_purchase(
 ) returns public.purchases
 language plpgsql
 security invoker
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   v_purchase public.purchases%rowtype;
