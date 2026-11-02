@@ -77,3 +77,10 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Live catalog inspection confirms the current policy definitions include branch-access checks for orders, order items and payments, and self-membership filtering for memberships. This is catalog evidence only; two-user/two-branch row-isolation tests remain required.
 - Latest existing PR-head quality runs #123 and #126 passed typecheck, ESLint and production build. The new SQL preflight commit still requires its own CI run and staging execution.
 - No report migration was applied to production. Phase 12 remains incomplete until migration 0012, SQL preflight, row-isolation, pagination reconciliation and EXPLAIN/ANALYZE checks pass.
+
+
+## Daily implementation update (2026-11-02)
+- Expanded the SQL preflight to assert that orders.status exposes the PAID enum state and payments.status exposes COMPLETED, because the report queries depend on those exact values, not merely on the columns existing.
+- The assertion resolves the status column's actual public enum type through the catalog rather than assuming a fixed enum type name.
+- The current PR-head typecheck/lint/build checks from the previous commit passed; this new SQL-test commit requires its own workflow run.
+- No report index migration was applied to production. The SQL preflight and two-branch/pagination/reconciliation tests still require staging execution.
