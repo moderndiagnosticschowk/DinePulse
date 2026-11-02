@@ -106,7 +106,8 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 
 
 ## Daily implementation update (2026-11-02)
-- Corrected the settlement function's PL/pgSQL dollar quoting from an invalid lone-dollar delimiter to a matching $$ ... $$ body.
+- Corrected the settlement function's PL/pgSQL dollar quoting from an invalid lone-dollar delimiter to a matching $ ... $ body.
+- Pinned the inventory/purchase mutating RPCs to `search_path = pg_catalog, public` and expanded SQL contract assertions to require that trusted path for all five mutating RPCs.
 - Bound the browser's pending payment idempotency key to the payment method. If a request outcome is uncertain, the user must retry with the same method; switching methods with the same key is blocked to avoid an idempotency mismatch or accidental second charge.
 - Legacy raw-string session attempts from the earlier draft UI are not silently converted into a fresh key. The UI requests payment-history reconciliation before another payment is attempted.
 - Added acceptance coverage requirements for same-method retry, different-method rejection, legacy/malformed pending attempt handling, and successful key cleanup.
