@@ -79,6 +79,37 @@ begin
     raise exception 'payments.paid_at is required for period-correct payment mix';
   end if;
 
+  -- Report queries rely on these exact enum states, not just the presence of status columns.
+  if not exists (
+    select 1
+    from information_schema.columns c
+    join pg_type t on t.typname = c.udt_name
+    join pg_namespace n on n.oid = t.typnamespace
+    join pg_enum e on e.enumtypid = t.oid
+    where c.table_schema = 'public'
+      and c.table_name = 'orders'
+      and c.column_name = 'status'
+      and n.nspname = 'public'
+      and e.enumlabel = 'PAID'
+  ) then
+    raise exception 'orders.status must support the PAID state used by sales reporting';
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.columns c
+    join pg_type t on t.typname = c.udt_name
+    join pg_namespace n on n.oid = t.typnamespace
+    join pg_enum e on e.enumtypid = t.oid
+    where c.table_schema = 'public'
+      and c.table_name = 'payments'
+      and c.column_name = 'status'
+      and n.nspname = 'public'
+      and e.enumlabel = 'COMPLETED'
+  ) then
+    raise exception 'payments.status must support the COMPLETED state used by payment-mix reporting';
+  end if;
+
   foreach v_index in array array[
     'idx_orders_branch_created_report',
     'idx_orders_branch_paid_at_report',
