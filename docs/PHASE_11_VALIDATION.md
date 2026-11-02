@@ -80,8 +80,9 @@ The code-level recipe-less retry gap has been addressed by adding `order_stock_c
 - Expanded SQL contract assertions now also check movement-direction enforcement, SECURITY INVOKER/DEFINER boundaries, the fixed search path on the ledger RPC, the ledger primary key, and audit actor attribution. The updated SQL test has not yet run against PostgreSQL.
 - No Supabase staging branch exists. Creating one may incur compute charges and is intentionally not done automatically.
 
-## Additional billing consistency blocker
-The current apps/web/app/billing/page.tsx performs three separate client-side writes: insert a payment, update the order to PAID, then call consume_order_stock. These are not one database transaction. If a later step fails, the database can retain a payment/order state without the corresponding stock ledger update; a retry can also create another payment because payments has no payment idempotency key in the inspected live schema. Treat this as a release blocker for cashier billing. Before production rollout, replace the sequence with a reviewed transactional settlement RPC/API that locks the order, validates the outstanding amount and payment method, records an idempotent payment, marks the order paid only when fully settled, and consumes stock in the same transaction. Do not patch the order of the three client writes as a substitute for atomicity.
+## Billing consistency blocker — implemented in this branch, staging pending
+The earlier client-side sequence of separate payment, order-status, and stock-consumption writes has been replaced on this branch by the transactional settle_order_payment RPC. The RPC locks the order, validates branch role and outstanding balance, records an idempotent payment, marks the order PAID only when fully settled, and invokes stock consumption in the same transaction. The billing UI calls this single RPC.
+The settlement function's dollar-quote delimiter was corrected on 2026-11-02 after source review found an invalid lone-dollar delimiter. This defect was not detected by TypeScript/ESLint/build CI because those jobs do not parse PostgreSQL migrations. Staging migration execution remains a hard release gate.
 
 ## Daily implementation update (2026-11-01)
 - Fixed a confirmed live-schema compatibility issue: `stock_movements.quantity` has a CHECK constraint requiring a positive value. The RPCs still accept signed quantities to apply stock deltas, but now persist positive movement magnitudes; `movement_type` identifies the movement category.
@@ -102,3 +103,11 @@ The current apps/web/app/billing/page.tsx performs three separate client-side wr
 6. The final payment marks the order PAID and consumes stock exactly once.
 7. A retry after a lost response returns the committed result; a cancelled/refunded order cannot be settled.
 8. Concurrent payments for one order serialize on the order row and cannot over-collect beyond the outstanding balance.
+
+
+## Daily implementation update (2026-11-02)
+- Corrected the settlement function's PL/pgSQL dollar quoting from an invalid lone-dollar delimiter to a matching $$ ... $$ body.
+- Bound the browser's pending payment idempotency key to the payment method. If a request outcome is uncertain, the user must retry with the same method; switching methods with the same key is blocked to avoid an idempotency mismatch or accidental second charge.
+- Legacy raw-string session attempts from the earlier draft UI are not silently converted into a fresh key. The UI requests payment-history reconciliation before another payment is attempted.
+- Added acceptance coverage requirements for same-method retry, different-method rejection, legacy/malformed pending attempt handling, and successful key cleanup.
+- The migration and all SQL assertions still require execution on a schema-matched PostgreSQL staging database. No production migration or deployment was performed.
