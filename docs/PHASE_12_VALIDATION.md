@@ -84,3 +84,10 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - The assertion resolves the status column's actual public enum type through the catalog rather than assuming a fixed enum type name.
 - The current PR-head typecheck/lint/build checks from the previous commit passed; this new SQL-test commit requires its own workflow run.
 - No report index migration was applied to production. The SQL preflight and two-branch/pagination/reconciliation tests still require staging execution.
+
+## Daily implementation update (2026-11-03)
+
+- Added `scripts/validate_sql.py` using pglast and wired it into the quality workflow to parse every migration and SQL contract test in the repository on PR/push. This adds SQL statement-grammar and dollar-quote framing checks alongside typecheck, lint and build.
+- The parser does not execute migrations, validate catalog-dependent assertions, prove RLS row isolation, or compile PL/pgSQL function bodies. Apply migration 0012 and run the SQL preflight on a schema-matched staging database before accepting the phase.
+- The previous PR-head quality run #153 passed typecheck, ESLint and production build. The new SQL-parser workflow commits require fresh CI runs.
+- No migration was applied to production and no change was made to `main`.
