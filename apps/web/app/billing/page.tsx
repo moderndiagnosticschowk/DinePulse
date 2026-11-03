@@ -158,12 +158,20 @@ export default function BillingPage() {
       });
       if (error) throw error;
 
+      // The RPC response confirms the payment transaction committed. Clear the
+      // pending key now, but keep refresh failures separate from payment failures:
+      // a failed list refresh must never invite the cashier to charge the customer again.
       sessionStorage.removeItem(storageKey);
       const result = data as SettlementResult;
-      setMessage(result.paid
+      const successMessage = result.paid
         ? `Order #${order.order_number ?? ''} settled by ${method}.`
-        : `Payment recorded. Remaining balance: ₹${Number(result.remaining_amount).toFixed(2)}.`);
-      await load();
+        : `Payment recorded. Remaining balance: ₹${Number(result.remaining_amount).toFixed(2)}.`;
+      setMessage(successMessage);
+      try {
+        await load();
+      } catch {
+        setMessage(`${successMessage} The payment is saved, but the bill list could not refresh. Refresh this page; do not submit the payment again.`);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Payment could not be completed. Retry safely.');
     } finally {
