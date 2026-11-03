@@ -91,3 +91,9 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - The parser does not execute migrations, validate catalog-dependent assertions, prove RLS row isolation, or compile PL/pgSQL function bodies. Apply migration 0012 and run the SQL preflight on a schema-matched staging database before accepting the phase.
 - The previous PR-head quality run #153 passed typecheck, ESLint and production build. The new SQL-parser workflow commits require fresh CI runs.
 - No migration was applied to production and no change was made to `main`.
+
+## Final CI verification (2026-11-03)
+- PR-head GitHub Actions run #175 completed successfully: pglast parsed all 8 SQL files (6 historical migrations, migration 0012, and the Phase 12 contract test) with zero parser failures; typecheck, ESLint, and production build also passed.
+- Netlify deploy preview is successful for the current PR head.
+- SQL parsing does not execute migrations, validate catalog-dependent assertions, prove RLS row isolation, or compile PL/pgSQL function bodies.
+- Migration 0012, SQL preflight, two-branch row isolation, pagination reconciliation, payment-time/date-window reconciliation and EXPLAIN/ANALYZE remain pending on a schema-matched staging database. Phase 12 is still incomplete.
