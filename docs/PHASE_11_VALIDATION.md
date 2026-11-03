@@ -112,3 +112,12 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Legacy raw-string session attempts from the earlier draft UI are not silently converted into a fresh key. The UI requests payment-history reconciliation before another payment is attempted.
 - Added acceptance coverage requirements for same-method retry, different-method rejection, legacy/malformed pending attempt handling, and successful key cleanup.
 - The migration and all SQL assertions still require execution on a schema-matched PostgreSQL staging database. No production migration or deployment was performed.
+
+## Daily implementation update (2026-11-03)
+
+- Re-inspection found the Phase 11 SQL contract test ended its `DO $$` block with a lone `$;`. Corrected the terminator to `$$;`; the prior Node typecheck/lint/build workflow did not parse SQL and therefore could not catch it.
+- Added `scripts/validate_sql.py` using pglast and wired it into the quality workflow so all files under `supabase/migrations` and `supabase/tests` receive PostgreSQL statement-grammar validation on PR/push.
+- The parser validates outer SQL statement grammar and dollar-quote framing; it does not execute migrations, resolve schema dependencies, or compile PL/pgSQL function bodies. Staging execution and behavioral tests remain mandatory.
+- Fixed the billing success path so a committed settlement followed by a failed order-list refresh is reported as a saved payment with a refresh warning, not as a failed payment that the cashier might submit again.
+- Rechecked the previously pending PR-head workflow run #159: it completed successfully. The new commits from 2026-11-03 require their own workflow runs.
+- No production migration, deployment, or change to `main` was made.
