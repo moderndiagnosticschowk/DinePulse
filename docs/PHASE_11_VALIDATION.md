@@ -121,3 +121,9 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Fixed the billing success path so a committed settlement followed by a failed order-list refresh is reported as a saved payment with a refresh warning, not as a failed payment that the cashier might submit again.
 - Rechecked the previously pending PR-head workflow run #159: it completed successfully. The new commits from 2026-11-03 require their own workflow runs.
 - No production migration, deployment, or change to `main` was made.
+
+## Final CI verification (2026-11-03)
+- PR-head GitHub Actions run #174 completed successfully: pglast parsed all 8 SQL files (6 historical migrations, migration 0011, and the Phase 11 contract test) with zero parser failures; typecheck, ESLint, and production build also passed.
+- Netlify deploy preview is successful for the current PR head.
+- The parser catches outer SQL grammar and dollar-quote framing, but does not execute PL/pgSQL function bodies or validate live schema dependencies.
+- Migration 0011 and the read-only contract assertions remain unexecuted against a schema-matched staging database. Phase 11 is still incomplete.
