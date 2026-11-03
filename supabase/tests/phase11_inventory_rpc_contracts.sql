@@ -226,6 +226,6 @@ begin
   end if;
 
 end;
-$;
+$$;
 
 select 'Phase 11 database contract assertions passed' as result;
