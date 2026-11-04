@@ -307,7 +307,15 @@ begin
     return 0;
   end if;
 
-  -- Backfill a marker for orders consumed by the legacy movement-only implementation.
+  -- Never create a legacy-consumption marker for an unpaid order. Otherwise an
+  -- early direct RPC call could make the later paid-order settlement skip stock.
+  if v_order.status <> 'PAID' then
+    raise exception 'Only paid orders can consume stock' using errcode = '55000';
+  end if;
+
+  -- Backfill a marker only after confirming the order is paid. The legacy flow
+  -- consumed all recipe movements in one transaction, so any matching legacy
+  -- order movement is treated as already consumed.
   if exists (
     select 1 from public.stock_movements
     where branch_id = p_branch_id
@@ -318,12 +326,6 @@ begin
     values (p_order_id, p_branch_id, v_actor, 0)
     on conflict (order_id) do nothing;
     return 0;
-  end if;
-
-  -- Stock may only be consumed after the order is paid. Cashiers can invoke this
-  -- guarded RPC from billing, but cannot call the general inventory adjustment RPC.
-  if v_order.status <> 'PAID' then
-    raise exception 'Only paid orders can consume stock' using errcode = '55000';
   end if;
 
   for v_order_item in
