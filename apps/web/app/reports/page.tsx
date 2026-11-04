@@ -16,9 +16,10 @@ type OrderRow = {
 type ItemRow = { order_id: string; item_name: string; quantity: number | string; line_total: number | string };
 type PaymentRow = { order_id: string; payment_method: string; amount: number | string; status: string; paid_at: string | null };
 type DaySales = { label: string; sales: number; orders: number };
-type Membership = { branch_id: string; role: string; branches: { id: string; name: string; code: string | null }[] | null };
+type Membership = { branch_id: string; role: string; branches: { id: string; name: string; code: string | null } | null };
 
 const money = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
+const OPEN_ORDER_STATUSES = ['OPEN', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'SERVED'];
 
 export default function ReportsPage() {
   const [range, setRange] = useState<7 | 30 | 90>(7);
@@ -26,6 +27,7 @@ export default function ReportsPage() {
   const [salesOrders, setSalesOrders] = useState<OrderRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [openOrderCount, setOpenOrderCount] = useState(0);
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [branchId, setBranchId] = useState('');
   const loadRequestRef = useRef(0);
@@ -41,6 +43,7 @@ export default function ReportsPage() {
     setSalesOrders([]);
     setItems([]);
     setPayments([]);
+    setOpenOrderCount(0);
     try {
       const to = new Date();
       const from = new Date(to);
@@ -65,6 +68,16 @@ export default function ReportsPage() {
         rows.push(...page);
         if (page.length < pageSize) break;
       }
+      if (requestId !== loadRequestRef.current) return;
+
+      // The open-order KPI is a current operational count, not a historical
+      // report-window count. Older orders still awaiting service must remain visible.
+      const { count: currentOpenOrderCount, error: openOrdersError } = await supabase
+        .from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('branch_id', branchId)
+        .in('status', OPEN_ORDER_STATUSES);
+      if (openOrdersError) throw openOrdersError;
       if (requestId !== loadRequestRef.current) return;
 
       // Sales are attributed to order payment time, not order creation time.
@@ -132,6 +145,7 @@ export default function ReportsPage() {
       setSalesOrders(paidRows);
       setItems(itemRows);
       setPayments(paymentRows);
+      setOpenOrderCount(currentOpenOrderCount ?? 0);
     } catch (e) {
       if (requestId === loadRequestRef.current) {
         setError(e instanceof Error ? e.message : 'Unable to load reports.');
@@ -198,7 +212,6 @@ export default function ReportsPage() {
   const paidOrders = useMemo(() => salesOrders, [salesOrders]);
   const sales = paidOrders.reduce((sum, order) => sum + Number(order.grand_total), 0);
   const averageBill = paidOrders.length ? sales / paidOrders.length : 0;
-  const openOrders = orders.filter(order => ['OPEN', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'SERVED'].includes(order.status)).length;
 
   const daily = useMemo<DaySales[]>(() => {
     const result: DaySales[] = [];
@@ -246,7 +259,7 @@ export default function ReportsPage() {
           <div>
             <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-slate-950">← Dashboard</Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Reports & Analytics</h1>
-            <p className="mt-1 text-sm text-slate-500">Reports for {memberships.find(membership => membership.branch_id === branchId)?.branches?.[0]?.name ?? 'your selected branch'}: sales, trends, best sellers and payment mix.</p>
+            <p className="mt-1 text-sm text-slate-500">Reports for {memberships.find(membership => membership.branch_id === branchId)?.branches?.name ?? 'your selected branch'}: sales, trends, best sellers and payment mix.</p>
           </div>
           {memberships.length > 1 && (
             <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
@@ -289,7 +302,7 @@ export default function ReportsPage() {
                 { label: 'Paid sales', value: money(sales), sub: 'Last ' + range + ' days' },
                 { label: 'Paid orders', value: String(paidOrders.length), sub: 'Completed payments' },
                 { label: 'Average bill', value: money(averageBill), sub: 'Paid sales ÷ paid orders' },
-                { label: 'Open orders', value: String(openOrders), sub: 'Awaiting completion' },
+                { label: 'Open orders', value: String(openOrderCount), sub: 'All active orders in this branch' },
               ].map((card) => (
                 <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-sm font-semibold text-slate-500">{card.label}</p>
