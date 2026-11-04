@@ -127,3 +127,9 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Netlify deploy preview is successful for the current PR head.
 - The parser catches outer SQL grammar and dollar-quote framing, but does not execute PL/pgSQL function bodies or validate live schema dependencies.
 - Migration 0011 and the read-only contract assertions remain unexecuted against a schema-matched staging database. Phase 11 is still incomplete.
+
+
+## 2026-11-04 regression check
+- An unpaid order that already has a legacy `ORDER`/`ORDER_CONSUMPTION` stock movement must still be rejected by `consume_order_stock`; it must not receive a durable consumption marker before the PAID guard.
+- Verify the PAID-state guard occurs before the legacy movement-only backfill check in the deployed function definition.
+- After payment settles, retrying consumption for the paid order must either perform the full deduction once or safely recognize a previously completed legacy consumption.
