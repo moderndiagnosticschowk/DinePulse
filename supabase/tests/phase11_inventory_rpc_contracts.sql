@@ -9,6 +9,7 @@ declare
   v_security_definer boolean;
   v_function_config text;
   v_function record;
+  v_function_def text;
 begin
   v_proc := to_regprocedure('public.adjust_inventory_stock(uuid,uuid,numeric,text,text,uuid,text,uuid)');
   if v_proc is null or (select prorettype from pg_proc where oid = v_proc) <> 'public.stock_movements'::regtype then
@@ -54,10 +55,15 @@ begin
   end loop;
 
   -- Billing can be performed by a cashier, but stock must only be consumed for paid orders.
-  if position('v_order.status <> ''paid''' in lower(pg_get_functiondef(
+  v_function_def := lower(pg_get_functiondef(
     'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
-  ))) = 0 then
+  ));
+  if position('v_order.status <> ''paid''' in v_function_def) = 0 then
     raise exception 'consume_order_stock must reject unpaid orders';
+  end if;
+  if position('v_order.status <> ''paid''' in v_function_def)
+    > position('-- backfill a marker only after confirming the order is paid' in v_function_def) then
+    raise exception 'consume_order_stock must check PAID status before creating a legacy-consumption marker';
   end if;
   if position('cashier' in lower(pg_get_functiondef(
     'public.consume_order_stock(uuid,uuid,uuid)'::regprocedure
