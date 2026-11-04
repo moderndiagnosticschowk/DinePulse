@@ -97,3 +97,9 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Netlify deploy preview is successful for the current PR head.
 - SQL parsing does not execute migrations, validate catalog-dependent assertions, prove RLS row isolation, or compile PL/pgSQL function bodies.
 - Migration 0012, SQL preflight, two-branch row isolation, pagination reconciliation, payment-time/date-window reconciliation and EXPLAIN/ANALYZE remain pending on a schema-matched staging database. Phase 12 is still incomplete.
+
+
+## 2026-11-04 regression checks
+- The **Open orders** KPI is a live operational count for the selected branch and must not be restricted by the selected 7/30/90-day reporting window. Verify an old still-open order is included.
+- The branch membership relation to `branches` is many-to-one; the UI must read the nested branch as an object (or null), not an array, and display the branch name in both the heading and selector.
+- Confirm branch switching cancels stale report requests and updates both historical metrics and the current open-order count.
