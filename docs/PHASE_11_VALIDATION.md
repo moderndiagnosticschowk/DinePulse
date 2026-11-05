@@ -133,3 +133,12 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - An unpaid order that already has a legacy `ORDER`/`ORDER_CONSUMPTION` stock movement must still be rejected by `consume_order_stock`; it must not receive a durable consumption marker before the PAID guard.
 - Verify the PAID-state guard occurs before the legacy movement-only backfill check in the deployed function definition.
 - After payment settles, retrying consumption for the paid order must either perform the full deduction once or safely recognize a previously completed legacy consumption.
+
+
+## Daily implementation update (2026-11-05)
+- Added an explicit amount field to Billing. Blank means collect the full outstanding balance; a valid positive amount up to the current due supports a partial payment.
+- The browser pending-attempt record now binds the idempotency key to both payment method and normalized two-decimal amount. A retry after an uncertain response must use the same method and amount; legacy records without an amount continue to mean the full-balance request used by earlier UI versions.
+- After the settlement RPC confirms commit, the pending key and amount input are cleared. A subsequent order-list refresh failure is still reported as a refresh issue, never as a failed charge.
+- Manual/CI acceptance gates added: blank full-balance payment, partial amount, zero/negative/over-due/over-precision rejection, same-method/same-amount retry, changed-method/changed-amount rejection, and post-commit refresh failure.
+- The UI passes `p_amount` to the existing `settle_order_payment` RPC; no database schema change was made in this update.
+- Production still lacks the Phase 11 ledger/payment idempotency objects and RPCs. Do not deploy this UI against production until migration 0011 has been applied and validated on a schema-matched staging database.
