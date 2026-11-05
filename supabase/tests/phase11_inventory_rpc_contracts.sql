@@ -179,6 +179,14 @@ begin
     or position('search_path=pg_catalog,public' in v_function_config) = 0 then
     raise exception 'settle_order_payment must be SECURITY DEFINER with a fixed trusted search_path';
   end if;
+  v_function_def := lower(pg_get_functiondef(
+    'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)'::regprocedure
+  ));
+  if position('v_existing.amount <> v_due' in v_function_def) = 0
+    or position('v_existing.reference_number is distinct from' in v_function_def) = 0
+    or position('v_existing.status <> ''completed''' in v_function_def) = 0 then
+    raise exception 'settle_order_payment must bind retries to the original amount, reference, and completed payment state';
+  end if;
   if position('for update' in lower(pg_get_functiondef(
     'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)'::regprocedure
   ))) = 0
