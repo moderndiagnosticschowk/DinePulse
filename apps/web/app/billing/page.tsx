@@ -17,10 +17,12 @@ type SettlementResult = {
   paid: boolean;
   duplicate: boolean;
   remaining_amount: number | string;
+  payment?: { amount: number | string } | null;
 };
 type PendingPaymentAttempt = {
   idempotencyKey: string;
   paymentMethod: PaymentMethod;
+  amount: number | null;
 };
 
 const paymentMethods: PaymentMethod[] = ['CASH', 'UPI', 'CARD'];
@@ -29,6 +31,7 @@ export default function BillingPage() {
   const [orders, setOrders] = useState<BillingOrder[]>([]);
   const [branchId, setBranchId] = useState('');
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
+  const [paymentAmounts, setPaymentAmounts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
 
   const load = useCallback(async () => {
@@ -109,13 +112,29 @@ export default function BillingPage() {
       return;
     }
 
+    const rawAmount = (paymentAmounts[order.id] ?? '').trim();
+    let requestedAmount: number | null = null;
+    if (rawAmount !== '') {
+      const parsedAmount = Number(rawAmount);
+      const roundedAmount = Math.round((parsedAmount + Number.EPSILON) * 100) / 100;
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        setMessage('Enter a payment amount greater than ₹0, or leave it blank to collect the full balance.');
+        return;
+      }
+      if (Math.abs(parsedAmount - roundedAmount) > 0.000001 || roundedAmount > order.amount_due) {
+        setMessage(`Enter an amount up to ₹${order.amount_due.toFixed(2)} with no more than two decimal places.`);
+        return;
+      }
+      requestedAmount = roundedAmount;
+    }
+
     setPayingOrderId(order.id);
     setMessage('');
     const storageKey = `dinepulse:payment-idempotency:${order.id}`;
 
     try {
-      // Bind the idempotency key to the original method. If the response was lost,
-      // retrying with a different method must not reuse the same key or create ambiguity.
+      // Bind the idempotency key to the original method and amount. If the response
+      // was lost, a retry must reproduce the exact payment attempt.
       const storedAttempt = sessionStorage.getItem(storageKey);
       let attempt: PendingPaymentAttempt;
       if (storedAttempt) {
@@ -135,16 +154,30 @@ export default function BillingPage() {
           setMessage('The saved payment attempt is invalid. Verify the payment history before starting another payment.');
           return;
         }
+        // Previous versions always sent p_amount=null, so a missing amount field
+        // safely represents a full-balance attempt during this compatibility window.
+        const savedAmount = candidate.amount === undefined ? null : candidate.amount;
+        if (savedAmount !== null
+          && (typeof savedAmount !== 'number' || !Number.isFinite(savedAmount) || savedAmount <= 0)) {
+          setMessage('The saved payment amount is invalid. Verify the payment history before starting another payment.');
+          return;
+        }
         attempt = {
           idempotencyKey: candidate.idempotencyKey,
           paymentMethod: candidate.paymentMethod as PaymentMethod,
+          amount: savedAmount,
         };
-        if (attempt.paymentMethod !== method) {
-          setMessage(`A previous ${attempt.paymentMethod} payment attempt is unresolved. Retry with ${attempt.paymentMethod}; changing methods with the same key is blocked to prevent duplicate charges.`);
+        if (attempt.paymentMethod !== method || attempt.amount !== requestedAmount) {
+          const savedAmountLabel = attempt.amount === null ? 'the full outstanding balance' : `₹${attempt.amount.toFixed(2)}`;
+          setMessage(`A previous ${attempt.paymentMethod} attempt for ${savedAmountLabel} is unresolved. Retry with the same method and amount; changing either is blocked to prevent duplicate charges.`);
           return;
         }
       } else {
-        attempt = { idempotencyKey: crypto.randomUUID(), paymentMethod: method };
+        attempt = {
+          idempotencyKey: crypto.randomUUID(),
+          paymentMethod: method,
+          amount: requestedAmount,
+        };
         sessionStorage.setItem(storageKey, JSON.stringify(attempt));
       }
 
@@ -153,19 +186,20 @@ export default function BillingPage() {
         p_branch_id: branchId,
         p_payment_method: attempt.paymentMethod,
         p_idempotency_key: attempt.idempotencyKey,
-        p_amount: null,
+        p_amount: attempt.amount,
         p_reference_number: null,
       });
       if (error) throw error;
 
       // The RPC response confirms the payment transaction committed. Clear the
-      // pending key now, but keep refresh failures separate from payment failures:
-      // a failed list refresh must never invite the cashier to charge the customer again.
+      // pending key now, but keep refresh failures separate from payment failures.
       sessionStorage.removeItem(storageKey);
+      setPaymentAmounts((current) => ({ ...current, [order.id]: '' }));
       const result = data as SettlementResult;
+      const chargedAmount = Number(result.payment?.amount ?? attempt.amount ?? order.amount_due);
       const successMessage = result.paid
-        ? `Order #${order.order_number ?? ''} settled by ${method}.`
-        : `Payment recorded. Remaining balance: ₹${Number(result.remaining_amount).toFixed(2)}.`;
+        ? `Order #${order.order_number ?? ''} settled. Payment received: ₹${chargedAmount.toFixed(2)} by ${method}.`
+        : `Payment of ₹${chargedAmount.toFixed(2)} recorded. Remaining balance: ₹${Number(result.remaining_amount).toFixed(2)}.`;
       setMessage(successMessage);
       try {
         await load();
@@ -183,7 +217,7 @@ export default function BillingPage() {
     <main className="min-h-screen bg-slate-50 p-5 lg:p-8">
       <div className="mx-auto max-w-6xl">
         <h1 className="text-2xl font-bold">Billing & Payments</h1>
-        <p className="mt-1 text-sm text-slate-500">Collect payment and close open orders.</p>
+        <p className="mt-1 text-sm text-slate-500">Collect full or partial payment and close open orders.</p>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           {orders.map((order) => (
@@ -195,12 +229,28 @@ export default function BillingPage() {
               <div className="mt-2 text-xs text-slate-500">
                 {order.status} · Total ₹{Number(order.grand_total).toFixed(2)}
               </div>
+              <label className="mt-4 block text-xs font-semibold text-slate-600">
+                Amount to collect (₹)
+                <input
+                  aria-label={`Payment amount for order ${order.order_number ?? order.id}`}
+                  type="number"
+                  inputMode="decimal"
+                  min="0.01"
+                  max={order.amount_due}
+                  step="0.01"
+                  value={paymentAmounts[order.id] ?? ''}
+                  onChange={(event) => setPaymentAmounts((current) => ({ ...current, [order.id]: event.target.value }))}
+                  placeholder={order.amount_due.toFixed(2)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-slate-500"
+                />
+              </label>
+              <p className="mt-1 text-xs text-slate-400">Leave blank to collect the full outstanding balance. Enter a smaller amount for a partial payment.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {paymentMethods.map((method) => (
                   <button
                     key={method}
                     type="button"
-                    disabled={payingOrderId !== null}
+                    disabled={payingOrderId !== null || order.amount_due <= 0}
                     onClick={() => void pay(order, method)}
                     className="rounded-xl border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                   >
