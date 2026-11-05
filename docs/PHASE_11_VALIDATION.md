@@ -142,3 +142,11 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Manual/CI acceptance gates added: blank full-balance payment, partial amount, zero/negative/over-due/over-precision rejection, same-method/same-amount retry, changed-method/changed-amount rejection, and post-commit refresh failure.
 - The UI passes `p_amount` to the existing `settle_order_payment` RPC; no database schema change was made in this update.
 - Production still lacks the Phase 11 ledger/payment idempotency objects and RPCs. Do not deploy this UI against production until migration 0011 has been applied and validated on a schema-matched staging database.
+
+
+## 2026-11-05 server-side idempotency hardening
+- The settlement RPC now reconstructs the outstanding balance before the existing payment row (excluding that row) when a retry uses `p_amount = NULL`. This binds a full-balance retry to the same amount that was due when the original payment committed.
+- Explicit partial-amount retries must match the original payment amount; retries also require the original row to remain COMPLETED and the normalized reference number to match.
+- Added a read-only SQL contract assertion against `pg_get_functiondef` for amount-mode, reference-number and completed-status checks.
+- This closes the server-side gap as well as the browser-side method/amount binding; no extra schema column was required.
+- The new migration and contract-test commits require their own PostgreSQL grammar/CI run. Staging execution and behavioral concurrency/retry tests remain pending.
