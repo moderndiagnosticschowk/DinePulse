@@ -449,8 +449,22 @@ begin
   from public.payments
   where order_id = p_order_id and idempotency_key = p_idempotency_key;
   if found then
-    if v_existing.payment_method <> p_payment_method
-      or (p_amount is not null and v_existing.amount <> p_amount) then
+    -- Reconstruct the outstanding balance immediately before this payment so
+    -- a NULL p_amount retry is bound to the same full-balance request, not just
+    -- to the same payment method. Explicit partial amounts must also match.
+    select coalesce(sum(amount), 0)::numeric(12,2)
+      into v_paid_before
+    from public.payments
+    where order_id = p_order_id
+      and status = 'COMPLETED'
+      and id <> v_existing.id;
+    v_due := greatest(v_order.grand_total - v_paid_before, 0);
+
+    if v_existing.status <> 'COMPLETED'
+      or v_existing.payment_method <> p_payment_method
+      or (p_amount is not null and v_existing.amount <> p_amount)
+      or (p_amount is null and v_existing.amount <> v_due)
+      or v_existing.reference_number is distinct from nullif(trim(p_reference_number), '') then
       raise exception 'Payment idempotency key was reused with different details'
         using errcode = '22023';
     end if;
