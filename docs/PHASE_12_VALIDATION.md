@@ -103,3 +103,11 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - The **Open orders** KPI is a live operational count for the selected branch and must not be restricted by the selected 7/30/90-day reporting window. Verify an old still-open order is included.
 - The branch membership relation to `branches` is many-to-one; the UI must read the nested branch as an object (or null), not an array, and display the branch name in both the heading and selector.
 - Confirm branch switching cancels stale report requests and updates both historical metrics and the current open-order count.
+
+
+## Daily implementation update (2026-11-05)
+- Normalized the nested `branches` relation used by branch memberships. PostgREST's many-to-one object shape is now supported, while array-shaped relationship metadata remains tolerated for compatibility.
+- The selected branch heading and branch selector both use the same normalized branch-summary helper, avoiding a blank branch label when the response is an object rather than an array.
+- Acceptance checks: verify branch names render for object, array, empty-array and null relation shapes; branch IDs remain the authorization/filter source; changing branches still invalidates stale report responses and refreshes the current open-order count.
+- No database schema or API endpoint change was required.
+- Migration 0012, the SQL preflight, two-user/two-branch row isolation, pagination reconciliation, partial-payment/date-window checks, report-total reconciliation and staging EXPLAIN/ANALYZE remain pending. Phase 12 remains incomplete.
