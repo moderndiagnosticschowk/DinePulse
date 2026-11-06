@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { formatINR, fromMinorUnits, toMinorUnits } from '@/lib/report-money.mjs';
 
 type OrderRow = {
   id: string;
@@ -25,7 +26,7 @@ type Membership = {
   branches: BranchSummary | BranchSummary[] | null;
 };
 
-const money = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
+const OPEN_ORDER_STATUSES = ['OPEN', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'SERVED'];
 const OPEN_ORDER_STATUSES = ['OPEN', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'SERVED'];
 
 function getBranchSummary(membership: Membership): BranchSummary | null {
@@ -222,7 +223,8 @@ export default function ReportsPage() {
   }, [load, branchId]);
 
   const paidOrders = useMemo(() => salesOrders, [salesOrders]);
-  const sales = paidOrders.reduce((sum, order) => sum + Number(order.grand_total), 0);
+  const salesMinorUnits = paidOrders.reduce((sum, order) => sum + toMinorUnits(order.grand_total), 0);
+  const sales = fromMinorUnits(salesMinorUnits);
   const averageBill = paidOrders.length ? sales / paidOrders.length : 0;
 
   const daily = useMemo<DaySales[]>(() => {
@@ -236,7 +238,7 @@ export default function ReportsPage() {
       const matching = paidOrders.filter(order => order.paid_at !== null && new Date(order.paid_at).toLocaleDateString('en-CA') === key);
       result.push({
         label: day.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-        sales: matching.reduce((sum, order) => sum + Number(order.grand_total), 0),
+        sales: fromMinorUnits(matching.reduce((sum, order) => sum + toMinorUnits(order.grand_total), 0)),
         orders: matching.length,
       });
     }
@@ -244,21 +246,28 @@ export default function ReportsPage() {
   }, [paidOrders, range]);
 
   const topItems = useMemo(() => {
-    const grouped = new Map<string, { quantity: number; sales: number }>();
+    const grouped = new Map<string, { quantity: number; salesMinorUnits: number }>();
     for (const item of items) {
-      const existing = grouped.get(item.item_name) ?? { quantity: 0, sales: 0 };
+      const existing = grouped.get(item.item_name) ?? { quantity: 0, salesMinorUnits: 0 };
       existing.quantity += Number(item.quantity);
-      existing.sales += Number(item.line_total);
+      existing.salesMinorUnits += toMinorUnits(item.line_total);
       grouped.set(item.item_name, existing);
     }
-    return [...grouped.entries()].map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.quantity - a.quantity).slice(0, 8);
+    return [...grouped.entries()].map(([name, data]) => ({
+      name,
+      quantity: data.quantity,
+      sales: fromMinorUnits(data.salesMinorUnits),
+    })).sort((a, b) => b.quantity - a.quantity).slice(0, 8);
   }, [items]);
 
   const paymentMix = useMemo(() => {
     const grouped = new Map<string, number>();
-    for (const payment of payments) grouped.set(payment.payment_method, (grouped.get(payment.payment_method) ?? 0) + Number(payment.amount));
-    return [...grouped.entries()].sort((a, b) => b[1] - a[1]);
+    for (const payment of payments) {
+      grouped.set(payment.payment_method, (grouped.get(payment.payment_method) ?? 0) + toMinorUnits(payment.amount));
+    }
+    return [...grouped.entries()]
+      .map(([method, amountMinorUnits]) => [method, fromMinorUnits(amountMinorUnits)] as const)
+      .sort((a, b) => b[1] - a[1]);
   }, [payments]);
 
   const maxSales = Math.max(1, ...daily.map(day => day.sales));
@@ -312,9 +321,9 @@ export default function ReportsPage() {
           <>
             <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                { label: 'Paid sales', value: money(sales), sub: 'Last ' + range + ' days' },
+                { label: 'Paid sales', value: formatINR(sales), sub: 'Last ' + range + ' days' },
                 { label: 'Paid orders', value: String(paidOrders.length), sub: 'Completed payments' },
-                { label: 'Average bill', value: money(averageBill), sub: 'Paid sales ÷ paid orders' },
+                { label: 'Average bill', value: formatINR(averageBill), sub: 'Paid sales ÷ paid orders' },
                 { label: 'Open orders', value: String(openOrderCount), sub: 'All active orders in this branch' },
               ].map((card) => (
                 <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -331,8 +340,8 @@ export default function ReportsPage() {
                 <div className="mt-6 flex h-56 items-end gap-1.5 sm:gap-2">
                   {daily.map((day, index) => (
                     <div key={day.label + index} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
-                      <span className="hidden text-[10px] font-semibold text-slate-500 sm:block">{day.sales ? money(day.sales) : '—'}</span>
-                      <div title={day.label + ': ' + money(day.sales) + ' · ' + day.orders + ' paid orders'} className="w-full max-w-10 rounded-t-md bg-slate-900 transition-all" style={{ height: String(Math.max(day.sales ? 4 : 1, day.sales / maxSales * 100)) + '%' }} />
+                      <span className="hidden text-[10px] font-semibold text-slate-500 sm:block">{day.sales ? formatINR(day.sales) : '—'}</span>
+                      <div title={day.label + ': ' + formatINR(day.sales) + ' · ' + day.orders + ' paid orders'} className="w-full max-w-10 rounded-t-md bg-slate-900 transition-all" style={{ height: String(Math.max(day.sales ? 4 : 1, day.sales / maxSales * 100)) + '%' }} />
                       <span className="truncate text-[10px] text-slate-500">{day.label}</span>
                     </div>
                   ))}
@@ -344,19 +353,19 @@ export default function ReportsPage() {
                 <p className="mt-1 text-sm text-slate-500">Completed payment transactions made in this period.</p>
                 {paymentMix.length ? <div className="mt-5 space-y-4">{paymentMix.map(([method, amount]) => {
                   const totalPayments = paymentMix.reduce((sum, entry) => sum + entry[1], 0);
-                  return <div key={method}><div className="mb-1.5 flex justify-between gap-3 text-sm"><span className="font-semibold">{method.replaceAll('_', ' ')}</span><span className="font-bold">{money(amount)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-900" style={{ width: String(totalPayments ? amount / totalPayments * 100 : 0) + '%' }} /></div></div>;
+                  return <div key={method}><div className="mb-1.5 flex justify-between gap-3 text-sm"><span className="font-semibold">{method.replaceAll('_', ' ')}</span><span className="font-bold">{formatINR(amount)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-900" style={{ width: String(totalPayments ? amount / totalPayments * 100 : 0) + '%' }} /></div></div>;
                 })}</div> : <p className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No completed payments in this period.</p>}
               </div>
             </section>
 
             <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div><h2 className="text-lg font-black">Best-selling items</h2><p className="mt-1 text-sm text-slate-500">Ranked by quantity across orders paid in the selected period.</p></div>
-              {topItems.length ? <div className="mt-5 space-y-4">{topItems.map((item, index) => <div key={item.name}><div className="mb-1.5 flex flex-wrap justify-between gap-2 text-sm"><span className="font-semibold">{index + 1}. {item.name}</span><span className="text-slate-500">{item.quantity} sold · {money(item.sales)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-900" style={{ width: String(item.quantity / maxItemQty * 100) + '%' }} /></div></div>)}</div> : <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No order items found in this period.</p>}
+              {topItems.length ? <div className="mt-5 space-y-4">{topItems.map((item, index) => <div key={item.name}><div className="mb-1.5 flex flex-wrap justify-between gap-2 text-sm"><span className="font-semibold">{index + 1}. {item.name}</span><span className="text-slate-500">{item.quantity} sold · {formatINR(item.sales)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-900" style={{ width: String(item.quantity / maxItemQty * 100) + '%' }} /></div></div>)}</div> : <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No order items found in this period.</p>}
             </section>
 
             <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between gap-3 p-5"><div><h2 className="text-lg font-black">Recent orders</h2><p className="mt-1 text-sm text-slate-500">Latest orders in the selected period.</p></div><Link href="/orders" className="text-sm font-bold text-slate-600 hover:text-slate-950">All orders →</Link></div>
-              <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Date</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Total</th></tr></thead><tbody>{orders.slice(0, 12).map(order => <tr key={order.id} className="border-t border-slate-100"><td className="px-5 py-3 font-bold">#{order.order_number ?? order.id.slice(0, 8)}</td><td className="whitespace-nowrap px-5 py-3 text-slate-500">{new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td className="px-5 py-3">{order.order_type.replaceAll('_', ' ')}</td><td className="px-5 py-3"><span className={'rounded-full px-2.5 py-1 text-xs font-bold ' + (order.status === 'PAID' ? 'bg-emerald-100 text-emerald-800' : order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700')}>{order.status}</span></td><td className="px-5 py-3 text-right font-bold">{money(Number(order.grand_total))}</td></tr>)}</tbody></table></div>
+              <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Date</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Total</th></tr></thead><tbody>{orders.slice(0, 12).map(order => <tr key={order.id} className="border-t border-slate-100"><td className="px-5 py-3 font-bold">#{order.order_number ?? order.id.slice(0, 8)}</td><td className="whitespace-nowrap px-5 py-3 text-slate-500">{new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td className="px-5 py-3">{order.order_type.replaceAll('_', ' ')}</td><td className="px-5 py-3"><span className={'rounded-full px-2.5 py-1 text-xs font-bold ' + (order.status === 'PAID' ? 'bg-emerald-100 text-emerald-800' : order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700')}>{order.status}</span></td><td className="px-5 py-3 text-right font-bold">{formatINR(Number(order.grand_total))}</td></tr>)}</tbody></table></div>
             </section>
           </>
         )}
