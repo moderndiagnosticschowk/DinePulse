@@ -120,3 +120,10 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Added the report-money unit test to the Phase 12 GitHub Actions quality workflow.
 - Manual staging acceptance: reconcile KPI, daily trend, best-seller totals and payment mix against SQL sums; verify values such as ₹0.50, ₹123.45 and aggregate ₹0.10 + ₹0.20 display as ₹0.50, ₹123.45 and ₹0.30 respectively.
 - No database schema change or production deployment was made. Migration 0012 and branch-isolation/financial reconciliation tests still require a schema-matched staging database.
+
+
+## 2026-11-06 CI follow-up
+- The first workflow attempts for the new currency test exposed two setup issues: the test file was not yet present on the branch for the earliest run, and the initial decimal parser regex was over-escaped. Both were corrected; the report-money unit-test step then passed.
+- Workflow run #42161424700 next caught a duplicate `OPEN_ORDER_STATUSES` declaration introduced while replacing the old formatter. Removed the duplicate in commit `4459cc507f48b93a87cec91d12a570153b46a23b`.
+- The corrected commit's complete GitHub Actions and deploy-preview results must be checked before considering the code checks green. The report-money unit tests passed on the preceding run, but its typecheck/build did not pass due to the duplicate declaration.
+- Staging migration 0012, two-branch row isolation, pagination reconciliation, payment-date/report-total reconciliation and EXPLAIN/ANALYZE remain release gates.
