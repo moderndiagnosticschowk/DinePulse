@@ -27,7 +27,6 @@ type Membership = {
 };
 
 const OPEN_ORDER_STATUSES = ['OPEN', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'SERVED'];
-const OPEN_ORDER_STATUSES = ['OPEN', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'SERVED'];
 
 function getBranchSummary(membership: Membership): BranchSummary | null {
   const relation = membership.branches;
