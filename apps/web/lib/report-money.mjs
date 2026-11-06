@@ -1,6 +1,6 @@
 export function toMinorUnits(value) {
   const raw = String(value).trim();
-  const match = /^(-?)(\\d+)(?:\\.(\\d+))?$/.exec(raw);
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(raw);
   if (!match) {
     throw new TypeError(`Invalid monetary value: ${raw}`);
   }
