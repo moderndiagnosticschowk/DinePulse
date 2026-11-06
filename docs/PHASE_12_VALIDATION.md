@@ -111,3 +111,12 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Acceptance checks: verify branch names render for object, array, empty-array and null relation shapes; branch IDs remain the authorization/filter source; changing branches still invalidates stale report responses and refreshes the current open-order count.
 - No database schema or API endpoint change was required.
 - Migration 0012, the SQL preflight, two-user/two-branch row isolation, pagination reconciliation, partial-payment/date-window checks, report-total reconciliation and staging EXPLAIN/ANALYZE remain pending. Phase 12 remains incomplete.
+
+
+## Daily implementation update (2026-11-06)
+- Corrected INR report formatting to always show two decimal places (paise); the previous formatter rounded every KPI/table amount to whole rupees.
+- Added a shared report-money helper that parses decimal database values into integer paise before aggregation. Paid sales, daily sales, best-seller line totals and payment-method totals now sum integer minor units and convert back only for display, avoiding binary floating-point accumulation drift.
+- Added dependency-free Node.js unit tests for decimal parsing, half-up paise rounding, negative values, invalid/non-finite input, safe-integer bounds and INR formatting.
+- Added the report-money unit test to the Phase 12 GitHub Actions quality workflow.
+- Manual staging acceptance: reconcile KPI, daily trend, best-seller totals and payment mix against SQL sums; verify values such as ₹0.50, ₹123.45 and aggregate ₹0.10 + ₹0.20 display as ₹0.50, ₹123.45 and ₹0.30 respectively.
+- No database schema change or production deployment was made. Migration 0012 and branch-isolation/financial reconciliation tests still require a schema-matched staging database.
