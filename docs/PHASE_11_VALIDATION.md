@@ -150,3 +150,10 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Added a read-only SQL contract assertion against `pg_get_functiondef` for amount-mode, reference-number and completed-status checks.
 - This closes the server-side gap as well as the browser-side method/amount binding; no extra schema column was required.
 - The new migration and contract-test commits require their own PostgreSQL grammar/CI run. Staging execution and behavioral concurrency/retry tests remain pending.
+
+
+## Daily implementation update (2026-11-06)
+- Hardened `settle_order_payment` at the database boundary: explicit amounts must be positive, finite numeric values and have no more than two decimal places. This prevents direct RPC/PostgREST callers from bypassing the Billing UI's two-decimal validation and relying on an implicit numeric(12,2) rounding during settlement.
+- Added a read-only SQL contract assertion requiring both the precision check and explicit rejection of PostgreSQL numeric special values (`NaN`, `Infinity`, `-Infinity`).
+- Staging acceptance cases: accept `125.50`; reject `125.505`, zero, negative, `NaN`, `Infinity`, and `-Infinity`; confirm rejected calls create no payment and do not change order/stock state.
+- No production migration was applied. The change is committed only to the Phase 11 PR branch; migration execution and transactional behavior still require a schema-matched disposable/staging database.
