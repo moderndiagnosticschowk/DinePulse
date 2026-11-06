@@ -28,6 +28,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Test report currency arithmetic
+        run: node --test apps/web/lib/report-money.test.mjs
       - name: Install workspace dependencies
         id: install
         run: npm install --no-audit --no-fund
