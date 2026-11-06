@@ -425,8 +425,12 @@ begin
     or length(p_idempotency_key) > 100 then
     raise exception 'A valid payment idempotency key is required';
   end if;
-  if p_amount is not null and p_amount <= 0 then
-    raise exception 'Payment amount must be positive';
+  if p_amount is not null and (
+    p_amount <= 0
+    or p_amount::text in ('NaN', 'Infinity', '-Infinity')
+    or p_amount <> round(p_amount, 2)
+  ) then
+    raise exception 'Payment amount must be positive, finite, and have at most two decimal places';
   end if;
   if not public.user_has_branch_role(
     p_branch_id,
