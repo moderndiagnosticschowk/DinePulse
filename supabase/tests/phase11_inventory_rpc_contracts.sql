@@ -187,6 +187,10 @@ begin
     or position('v_existing.status <> ''completed''' in v_function_def) = 0 then
     raise exception 'settle_order_payment must bind retries to the original amount, reference, and completed payment state';
   end if;
+  if position('p_amount <> round(p_amount, 2)' in v_function_def) = 0
+    or position('p_amount::text in (''nan'', ''infinity'', ''-infinity'')' in v_function_def) = 0 then
+    raise exception 'settle_order_payment must reject over-precision and non-finite payment amounts at the database boundary';
+  end if;
   if position('for update' in lower(pg_get_functiondef(
     'public.settle_order_payment(uuid,uuid,public.payment_method,text,numeric,text)'::regprocedure
   ))) = 0
