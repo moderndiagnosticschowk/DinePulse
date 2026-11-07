@@ -40,7 +40,6 @@ export default function POSPage() {
   const syncLock = useRef(false);
 
   const queueKey = branchId ? `${CACHE_PREFIX}${branchId}:queue` : '';
-  const menuCacheKey = branchId ? `${CACHE_PREFIX}${branchId}:menu` : '';
 
   const persistQueue = useCallback((next: QueuedOrder[]) => {
     if (!branchId) return;
@@ -90,7 +89,7 @@ export default function POSPage() {
   }, [branchId]);
 
   useEffect(() => {
-    setOnline(navigator.onLine);
+    const onlineTimer = window.setTimeout(() => setOnline(navigator.onLine), 0);
     const onOnline = () => {
       setOnline(true);
       void syncQueue();
@@ -102,6 +101,7 @@ export default function POSPage() {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
     return () => {
+      window.clearTimeout(onlineTimer);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
