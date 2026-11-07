@@ -599,3 +599,78 @@ grant execute on function public.user_has_branch_access(uuid) to authenticated;
 grant execute on function public.user_has_branch_role(uuid, public.membership_role[]) to authenticated;
 grant execute on function public.user_has_company_access(uuid) to authenticated;
 grant execute on function public.user_is_branch_owner_or_admin(uuid) to authenticated;
+
+-- Allow kitchen staff to advance only the KOT status, without granting them
+-- direct UPDATE access to the full order_items row.
+create or replace function public.update_kitchen_item_status(
+  p_order_item_id uuid,
+  p_status public.kitchen_item_status
+) returns public.order_items
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_item public.order_items%rowtype;
+  v_branch_id uuid;
+  v_allowed_roles public.membership_role[];
+begin
+  if v_actor is null then
+    raise exception 'Authentication required' using errcode = '42501';
+  end if;
+  if p_status is null or p_status not in ('PREPARING', 'READY', 'SERVED') then
+    raise exception 'Invalid kitchen status transition';
+  end if;
+
+  select * into v_item
+  from public.order_items
+  where id = p_order_item_id
+  for update;
+  if not found then
+    raise exception 'Kitchen order item not found';
+  end if;
+
+  select branch_id into v_branch_id
+  from public.orders
+  where id = v_item.order_id;
+  if v_branch_id is null then
+    raise exception 'Parent order not found';
+  end if;
+
+  if v_item.kitchen_status = 'READY' and p_status = 'SERVED' then
+    v_allowed_roles := array['OWNER','ADMIN','MANAGER','KITCHEN','WAITER']::public.membership_role[];
+  else
+    v_allowed_roles := array['OWNER','ADMIN','MANAGER','KITCHEN']::public.membership_role[];
+  end if;
+
+  if not public.user_has_branch_role(v_branch_id, v_allowed_roles) then
+    raise exception 'Kitchen status permission required' using errcode = '42501';
+  end if;
+
+  -- Same-target retries are idempotent after a lost response.
+  if v_item.kitchen_status = p_status then
+    return v_item;
+  end if;
+
+  if not (
+    (v_item.kitchen_status = 'NEW' and p_status = 'PREPARING')
+    or (v_item.kitchen_status = 'PREPARING' and p_status = 'READY')
+    or (v_item.kitchen_status = 'READY' and p_status = 'SERVED')
+  ) then
+    raise exception 'Invalid kitchen status transition from % to %', v_item.kitchen_status, p_status
+      using errcode = '22023';
+  end if;
+
+  update public.order_items
+  set kitchen_status = p_status,
+      updated_at = now()
+  where id = v_item.id
+  returning * into v_item;
+
+  return v_item;
+end;
+$$;
+
+revoke execute on function public.update_kitchen_item_status(uuid, public.kitchen_item_status) from public, anon;
+grant execute on function public.update_kitchen_item_status(uuid, public.kitchen_item_status) to authenticated;
