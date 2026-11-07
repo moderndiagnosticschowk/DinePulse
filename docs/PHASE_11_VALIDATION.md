@@ -157,3 +157,12 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Added a read-only SQL contract assertion requiring both the precision check and explicit rejection of PostgreSQL numeric special values (`NaN`, `Infinity`, `-Infinity`).
 - Staging acceptance cases: accept `125.50`; reject `125.505`, zero, negative, `NaN`, `Infinity`, and `-Infinity`; confirm rejected calls create no payment and do not change order/stock state.
 - No production migration was applied. The change is committed only to the Phase 11 PR branch; migration execution and transactional behavior still require a schema-matched disposable/staging database.
+
+## Daily security hardening update (2026-11-07)
+- Added trusted search_path = pg_catalog, public settings to set_updated_at, get_current_user_id, complete_workspace_onboarding, user_has_branch_access, user_has_branch_role, user_has_company_access, and user_is_branch_owner_or_admin.
+- Revoked default/public and anon EXECUTE from the five exposed SECURITY DEFINER onboarding/access helpers while explicitly retaining authenticated EXECUTE because RLS policies and authenticated application flows call them. The event-trigger function rls_auto_enable is intentionally not changed in this migration; its event-trigger behavior and ACL need separate verification.
+- Expanded the Phase 11 SQL contract test to assert the fixed helper search paths, deny anonymous helper execution, and preserve authenticated execution. The test's closing DO $$ delimiter is explicitly checked by the PostgreSQL parser.
+- New production authorization blocker: live public.orders_write is FOR ALL for authenticated, with USING and WITH CHECK based only on user_has_branch_access(branch_id). This is broader than operation-specific role permissions. Before production, map all POS, waiter, cashier and kitchen order-write paths, then split the policy into least-privilege operation/role policies and test role denial in staging. Do not change it blindly because legitimate order/KOT workflows may depend on current writes.
+- Live orders, order_items, payments, purchases and stock_movements counts are all currently zero, so acceptance tests need seeded staging fixtures rather than relying on production data.
+- The prior shared documentation workflow #224 passed all quality steps. Today's migration/test commits require their own workflow run; PostgreSQL staging execution remains pending.
+- No production DDL, deployment or main change was made.
