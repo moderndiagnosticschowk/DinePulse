@@ -127,3 +127,10 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Workflow run #42161424700 next caught a duplicate `OPEN_ORDER_STATUSES` declaration introduced while replacing the old formatter. Removed the duplicate in commit `4459cc507f48b93a87cec91d12a570153b46a23b`.
 - The corrected commit's complete GitHub Actions and deploy-preview results must be checked before considering the code checks green. The report-money unit tests passed on the preceding run, but its typecheck/build did not pass due to the duplicate declaration.
 - Staging migration 0012, two-branch row isolation, pagination reconciliation, payment-date/report-total reconciliation and EXPLAIN/ANALYZE remain release gates.
+
+## Production data-volume audit (2026-11-07)
+- Read-only exact counts on the live project are currently zero for orders, order_items, payments, purchases and stock_movements. This means production cannot validate report totals, pagination completeness or representative query plans today.
+- Do not seed synthetic rows in production. Use a disposable schema-matched staging database with at least 500 orders, 1,200 order_items, 600 completed payments, partial-payment cases, multiple payment methods, at least two branches, and open orders older than the selected 7/30/90-day window.
+- Run the SQL preflight after migration 0012, then compare EXPLAIN (ANALYZE, BUFFERS) for recent orders, paid-order sales, order-item pagination and completed-payment mix before/after the four report indexes.
+- Verify row isolation using two authenticated users with disjoint branch memberships; catalog policy predicates alone are not an isolation test.
+- Production migration 0012 remains unapplied; no development branch was created because branch creation can incur compute charges. No production DDL or deployment was performed.
