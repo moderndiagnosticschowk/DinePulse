@@ -338,6 +338,17 @@ begin
     raise exception 'Broad orders_write policy must be removed';
   end if;
 
+  -- POS creation must remain SECURITY INVOKER and perform its own role check;
+  -- the new INSERT/UPDATE RLS policies are deliberately aligned to that contract.
+  if not exists (
+    select 1 from pg_proc
+    where oid = 'public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)'::regprocedure
+      and not prosecdef
+      and position('user_has_branch_role' in lower(pg_get_functiondef(oid))) > 0
+  ) then
+    raise exception 'create_pos_order must remain SECURITY INVOKER with explicit branch-role authorization';
+  end if;
+
   if not exists (
     select 1 from pg_policies
     where schemaname = 'public'
