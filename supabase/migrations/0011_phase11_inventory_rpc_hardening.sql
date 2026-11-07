@@ -638,7 +638,7 @@ begin
     raise exception 'Parent order not found';
   end if;
 
-  if v_item.kitchen_status = 'READY' and p_status = 'SERVED' then
+  if p_status = 'SERVED' then
     v_allowed_roles := array['OWNER','ADMIN','MANAGER','KITCHEN','WAITER']::public.membership_role[];
   else
     v_allowed_roles := array['OWNER','ADMIN','MANAGER','KITCHEN']::public.membership_role[];
