@@ -298,7 +298,7 @@ begin
     where oid = 'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
       and prosecdef
       and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
-      and pg_get_function_result(oid) = 'order_items'
+      and prorettype = 'public.order_items'::regtype
   ) then
     raise exception 'update_kitchen_item_status must be SECURITY DEFINER, fixed-path, and return order_items';
   end if;
