@@ -568,3 +568,34 @@ grant execute on function public.adjust_inventory_stock(uuid,uuid,numeric,text,t
 grant execute on function public.create_purchase(uuid,uuid,uuid,text,date,numeric,text,numeric,text,jsonb,text) to authenticated;
 grant execute on function public.receive_purchase(uuid,uuid,uuid) to authenticated;
 grant execute on function public.consume_order_stock(uuid,uuid,uuid) to authenticated;
+
+-- Harden existing SECURITY DEFINER helpers used by onboarding and RLS.
+-- Keep authenticated EXECUTE for policies/application flows, but remove the
+-- unnecessary anonymous/public RPC surface. Pin all helper resolution to trusted
+-- system objects first, then the explicitly-qualified public schema.
+alter function public.set_updated_at()
+  set search_path = pg_catalog, public;
+alter function public.get_current_user_id()
+  set search_path = pg_catalog, public;
+alter function public.complete_workspace_onboarding(text, text, text)
+  set search_path = pg_catalog, public;
+alter function public.user_has_branch_access(uuid)
+  set search_path = pg_catalog, public;
+alter function public.user_has_branch_role(uuid, public.membership_role[])
+  set search_path = pg_catalog, public;
+alter function public.user_has_company_access(uuid)
+  set search_path = pg_catalog, public;
+alter function public.user_is_branch_owner_or_admin(uuid)
+  set search_path = pg_catalog, public;
+
+revoke execute on function public.complete_workspace_onboarding(text, text, text) from public, anon;
+revoke execute on function public.user_has_branch_access(uuid) from public, anon;
+revoke execute on function public.user_has_branch_role(uuid, public.membership_role[]) from public, anon;
+revoke execute on function public.user_has_company_access(uuid) from public, anon;
+revoke execute on function public.user_is_branch_owner_or_admin(uuid) from public, anon;
+
+grant execute on function public.complete_workspace_onboarding(text, text, text) to authenticated;
+grant execute on function public.user_has_branch_access(uuid) to authenticated;
+grant execute on function public.user_has_branch_role(uuid, public.membership_role[]) to authenticated;
+grant execute on function public.user_has_company_access(uuid) to authenticated;
+grant execute on function public.user_is_branch_owner_or_admin(uuid) to authenticated;
