@@ -243,7 +243,35 @@ begin
     raise exception 'receive_purchase must write auth.uid()-derived v_actor as received_by';
   end if;
 
+
+  -- Existing helper functions remain available to authenticated RLS/application
+  -- flows, but anonymous callers must not invoke SECURITY DEFINER helpers.
+  if not exists (
+    select 1 from pg_proc
+    where oid = 'public.set_updated_at()'::regprocedure
+      and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
+  ) or not exists (
+    select 1 from pg_proc
+    where oid = 'public.get_current_user_id()'::regprocedure
+      and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
+  ) then
+    raise exception 'Shared trigger/current-user helpers must pin search_path to pg_catalog, public';
+  end if;
+
+  if has_function_privilege('anon', 'public.complete_workspace_onboarding(text,text,text)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.complete_workspace_onboarding(text,text,text)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.user_has_branch_access(uuid)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.user_has_branch_access(uuid)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.user_has_branch_role(uuid,public.membership_role[])', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.user_has_branch_role(uuid,public.membership_role[])', 'EXECUTE')
+    or has_function_privilege('anon', 'public.user_has_company_access(uuid)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.user_has_company_access(uuid)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.user_is_branch_owner_or_admin(uuid)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.user_is_branch_owner_or_admin(uuid)', 'EXECUTE') then
+    raise exception 'SECURITY DEFINER helper grants must deny anon while preserving authenticated RLS/application access';
+  end if;
+
 end;
-$$;
+$;
 
 select 'Phase 11 database contract assertions passed' as result;
