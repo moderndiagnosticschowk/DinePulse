@@ -174,3 +174,13 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - SQL contract assertions cover the RPC return type, SECURITY DEFINER/fixed path, authenticated-only execution, branch-role check, row lock and waiter served-status retry condition.
 - The live public.orders_write policy is FOR ALL and only checks branch membership; authenticated also has table SELECT/INSERT/UPDATE/DELETE privileges. Migration 0011 now drops that broad policy and creates operation-specific policies: INSERT/UPDATE for OWNER/ADMIN/MANAGER/CASHIER/WAITER (matching the SECURITY INVOKER create_pos_order RPC), and DELETE for OWNER/ADMIN/MANAGER only. The production policy remains broad until migration 0011 is applied; staging must prove cashier/waiter order creation still works while KITCHEN/INVENTORY_MANAGER and unauthorized delete attempts are denied.
 - Production currently has zero orders/order_items/payments/purchases/stock_movements, so use seeded staging fixtures. No production DDL or deployment was performed.
+
+## Additional role-behavior acceptance tests (2026-11-07)
+1. Confirm migration removes orders_write and creates orders_insert/orders_update/orders_delete.
+2. OWNER/ADMIN/MANAGER/CASHIER/WAITER can create/update orders through the intended POS flow; KITCHEN and INVENTORY_MANAGER cannot directly insert/update orders.
+3. Only OWNER/ADMIN/MANAGER can delete orders; CASHIER/WAITER/KITCHEN/INVENTORY_MANAGER deletion attempts must be denied.
+4. Confirm create_pos_order remains SECURITY INVOKER with its own user_has_branch_role check and still creates orders for CASHIER/WAITER after the RLS policy split.
+5. A KITCHEN member can advance NEW -> PREPARING -> READY through update_kitchen_item_status, but direct order_items UPDATE remains denied by RLS.
+6. A WAITER can advance READY -> SERVED; other roles must follow the explicit RPC role matrix.
+7. Repeating the same target status after a lost response returns the current row without a second transition; invalid/backward transitions are rejected.
+8. Cross-branch order-item IDs and users without active membership are rejected by the KOT RPC.
