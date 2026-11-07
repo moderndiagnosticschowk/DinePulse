@@ -184,3 +184,8 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 6. A WAITER can advance READY -> SERVED; other roles must follow the explicit RPC role matrix.
 7. Repeating the same target status after a lost response returns the current row without a second transition; invalid/backward transitions are rejected.
 8. Cross-branch order-item IDs and users without active membership are rejected by the KOT RPC.
+
+## Remaining column-level authorization review (2026-11-07)
+- The new orders_update policy is role-scoped but still permits CASHIER/WAITER UPDATE on the full row because the current SECURITY INVOKER create_pos_order RPC updates order totals after inserting lines. RLS cannot distinguish which columns those roles may update.
+- Before production, decide whether CASHIER/WAITER may directly change financial/order-state columns. If not, move all order mutations into narrowly scoped RPCs (including POS creation), then remove direct UPDATE grants/policies and add negative tests for grand_total, paid_at, status and discount tampering.
+- order_items_write also remains a broad ALL policy for OWNER/ADMIN/MANAGER/CASHIER/WAITER. Review direct item-edit flows and move sensitive line-total/kitchen-status changes behind explicit RPCs rather than expanding KITCHEN's direct table privileges.
