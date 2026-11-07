@@ -674,3 +674,44 @@ $$;
 
 revoke execute on function public.update_kitchen_item_status(uuid, public.kitchen_item_status) from public, anon;
 grant execute on function public.update_kitchen_item_status(uuid, public.kitchen_item_status) to authenticated;
+
+-- Replace the broad FOR ALL orders policy with operation-specific branch roles.
+-- POS creation runs through create_pos_order (SECURITY INVOKER), so cashier/waiter
+-- retain INSERT/UPDATE needed by that RPC; only managers/admins/owners may delete.
+drop policy if exists orders_write on public.orders;
+drop policy if exists orders_insert on public.orders;
+drop policy if exists orders_update on public.orders;
+drop policy if exists orders_delete on public.orders;
+
+create policy orders_insert on public.orders
+for insert to authenticated
+with check (
+  public.user_has_branch_role(
+    branch_id,
+    array['OWNER','ADMIN','MANAGER','CASHIER','WAITER']::public.membership_role[]
+  )
+);
+
+create policy orders_update on public.orders
+for update to authenticated
+using (
+  public.user_has_branch_role(
+    branch_id,
+    array['OWNER','ADMIN','MANAGER','CASHIER','WAITER']::public.membership_role[]
+  )
+)
+with check (
+  public.user_has_branch_role(
+    branch_id,
+    array['OWNER','ADMIN','MANAGER','CASHIER','WAITER']::public.membership_role[]
+  )
+);
+
+create policy orders_delete on public.orders
+for delete to authenticated
+using (
+  public.user_has_branch_role(
+    branch_id,
+    array['OWNER','ADMIN','MANAGER']::public.membership_role[]
+  )
+);
