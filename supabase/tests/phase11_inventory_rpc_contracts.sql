@@ -321,6 +321,54 @@ begin
     raise exception 'Kitchen status RPC must enforce branch roles, serialize updates, and support idempotent retries';
   end if;
 
+
+  -- Orders must not retain the old broad FOR ALL branch-membership write policy.
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
+      and policyname = 'orders_write'
+  ) then
+    raise exception 'Broad orders_write policy must be removed';
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
+      and policyname = 'orders_insert'
+      and cmd = 'INSERT'
+      and 'authenticated' = any(roles)
+      and position('user_has_branch_role' in lower(coalesce(with_check, ''))) > 0
+  ) or not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
+      and policyname = 'orders_update'
+      and cmd = 'UPDATE'
+      and 'authenticated' = any(roles)
+      and position('user_has_branch_role' in lower(coalesce(qual, ''))) > 0
+      and position('user_has_branch_role' in lower(coalesce(with_check, ''))) > 0
+  ) then
+    raise exception 'Order INSERT/UPDATE policies must enforce branch roles in both USING and WITH CHECK';
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
+      and policyname = 'orders_delete'
+      and cmd = 'DELETE'
+      and 'authenticated' = any(roles)
+      and position('user_has_branch_role' in lower(coalesce(qual, ''))) > 0
+      and position('cashier' in lower(coalesce(qual, ''))) = 0
+      and position('waiter' in lower(coalesce(qual, ''))) = 0
+      and position('kitchen' in lower(coalesce(qual, ''))) = 0
+      and position('inventory_manager' in lower(coalesce(qual, ''))) = 0
+  ) then
+    raise exception 'Order DELETE must be restricted to owner/admin/manager roles';
+  end if;
+
 end;
 $$;
 
