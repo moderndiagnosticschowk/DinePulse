@@ -166,3 +166,11 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Live orders, order_items, payments, purchases and stock_movements counts are all currently zero, so acceptance tests need seeded staging fixtures rather than relying on production data.
 - The prior shared documentation workflow #224 passed all quality steps. Today's migration/test commits require their own workflow run; PostgreSQL staging execution remains pending.
 - No production DDL, deployment or main change was made.
+
+## KOT authorization correction (2026-11-07)
+- Live order_items_write is FOR ALL to authenticated but its branch-role list excludes KITCHEN. The current Kitchen page previously attempted a direct order_items UPDATE, so a KITCHEN member could not reliably advance NEW/PREPARING/READY items under the inspected production RLS policy.
+- Added update_kitchen_item_status(order_item_id, status), a SECURITY DEFINER RPC with fixed search_path, auth.uid() validation, parent-order branch-role validation, row locking, strict NEW -> PREPARING -> READY -> SERVED transitions, and same-target idempotent retry behavior. OWNER/ADMIN/MANAGER/KITCHEN may advance preparation; WAITER is additionally allowed to mark SERVED and retry that same target.
+- Kitchen UI now calls the guarded RPC instead of directly updating the full order_items row and displays RPC errors. This avoids granting KITCHEN broad order_items UPDATE access.
+- SQL contract assertions cover the RPC return type, SECURITY DEFINER/fixed path, authenticated-only execution, branch-role check, row lock and waiter served-status retry condition.
+- Separate high-priority issue remains: public.orders_write is FOR ALL and only checks branch membership. Authenticated has table SELECT/INSERT/UPDATE/DELETE privileges, so the policy is broader than role-specific authorization. Map all direct order write paths before splitting this policy into operation/role-specific rules; keep this a release blocker until staging role-denial tests pass.
+- Production currently has zero orders/order_items/payments/purchases/stock_movements, so use seeded staging fixtures. No production DDL or deployment was performed.
