@@ -291,6 +291,33 @@ begin
     raise exception 'SECURITY DEFINER helper grants must deny anon while preserving authenticated RLS/application access';
   end if;
 
+
+  -- Kitchen users must update only the KOT status through a guarded RPC.
+  if not exists (
+    select 1 from pg_proc
+    where oid = 'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
+      and prosecdef
+      and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
+      and pg_get_function_result(oid) = 'order_items'
+  ) then
+    raise exception 'update_kitchen_item_status must be SECURITY DEFINER, fixed-path, and return order_items';
+  end if;
+  if has_function_privilege('anon', 'public.update_kitchen_item_status(uuid,public.kitchen_item_status)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.update_kitchen_item_status(uuid,public.kitchen_item_status)', 'EXECUTE') then
+    raise exception 'Kitchen status RPC grants must deny anon and allow authenticated';
+  end if;
+  if position('user_has_branch_role' in lower(pg_get_functiondef(
+    'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
+  ))) = 0
+    or position('for update' in lower(pg_get_functiondef(
+      'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
+    ))) = 0
+    or position('v_item.kitchen_status = p_status' in lower(pg_get_functiondef(
+      'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
+    ))) = 0 then
+    raise exception 'Kitchen status RPC must enforce branch roles, serialize updates, and support idempotent retries';
+  end if;
+
 end;
 $$;
 
