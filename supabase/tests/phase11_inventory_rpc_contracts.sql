@@ -314,6 +314,9 @@ begin
     ))) = 0
     or position('v_item.kitchen_status = p_status' in lower(pg_get_functiondef(
       'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
+    ))) = 0
+    or position('if p_status = ''served'' then' in lower(pg_get_functiondef(
+      'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
     ))) = 0 then
     raise exception 'Kitchen status RPC must enforce branch roles, serialize updates, and support idempotent retries';
   end if;
