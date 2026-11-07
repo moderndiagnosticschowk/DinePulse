@@ -254,6 +254,26 @@ begin
     select 1 from pg_proc
     where oid = 'public.get_current_user_id()'::regprocedure
       and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
+  ) or not exists (
+    select 1 from pg_proc
+    where oid = 'public.complete_workspace_onboarding(text,text,text)'::regprocedure
+      and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
+  ) or not exists (
+    select 1 from pg_proc
+    where oid = 'public.user_has_branch_access(uuid)'::regprocedure
+      and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
+  ) or not exists (
+    select 1 from pg_proc
+    where oid = 'public.user_has_branch_role(uuid,public.membership_role[])'::regprocedure
+      and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
+  ) or not exists (
+    select 1 from pg_proc
+    where oid = 'public.user_has_company_access(uuid)'::regprocedure
+      and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
+  ) or not exists (
+    select 1 from pg_proc
+    where oid = 'public.user_is_branch_owner_or_admin(uuid)'::regprocedure
+      and position('search_path=pg_catalog,public' in replace(coalesce(array_to_string(proconfig, ','), ''), ' ', '')) > 0
   ) then
     raise exception 'Shared trigger/current-user helpers must pin search_path to pg_catalog, public';
   end if;
@@ -272,6 +292,6 @@ begin
   end if;
 
 end;
-$;
+$$;
 
 select 'Phase 11 database contract assertions passed' as result;
