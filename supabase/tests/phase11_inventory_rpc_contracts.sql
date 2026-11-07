@@ -309,6 +309,12 @@ begin
   if position('user_has_branch_role' in lower(pg_get_functiondef(
     'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
   ))) = 0
+    or position('kitchen' in lower(pg_get_functiondef(
+      'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
+    ))) = 0
+    or position('waiter' in lower(pg_get_functiondef(
+      'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
+    ))) = 0
     or position('for update' in lower(pg_get_functiondef(
       'public.update_kitchen_item_status(uuid,public.kitchen_item_status)'::regprocedure
     ))) = 0
@@ -357,10 +363,37 @@ begin
     select 1 from pg_policies
     where schemaname = 'public'
       and tablename = 'orders'
+      and policyname = 'orders_insert'
+      and position('cashier' in lower(coalesce(with_check, ''))) > 0
+      and position('waiter' in lower(coalesce(with_check, ''))) > 0
+      and position('kitchen' in lower(coalesce(with_check, ''))) = 0
+      and position('inventory_manager' in lower(coalesce(with_check, ''))) = 0
+  ) or not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
+      and policyname = 'orders_update'
+      and position('cashier' in lower(coalesce(qual, ''))) > 0
+      and position('waiter' in lower(coalesce(qual, ''))) > 0
+      and position('kitchen' in lower(coalesce(qual, ''))) = 0
+      and position('inventory_manager' in lower(coalesce(qual, ''))) = 0
+      and position('cashier' in lower(coalesce(with_check, ''))) > 0
+      and position('waiter' in lower(coalesce(with_check, ''))) > 0
+  ) then
+    raise exception 'Order INSERT/UPDATE must allow cashier/waiter POS flows but exclude kitchen/inventory manager roles';
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
       and policyname = 'orders_delete'
       and cmd = 'DELETE'
       and 'authenticated' = any(roles)
       and position('user_has_branch_role' in lower(coalesce(qual, ''))) > 0
+      and position('owner' in lower(coalesce(qual, ''))) > 0
+      and position('admin' in lower(coalesce(qual, ''))) > 0
+      and position('manager' in lower(coalesce(qual, ''))) > 0
       and position('cashier' in lower(coalesce(qual, ''))) = 0
       and position('waiter' in lower(coalesce(qual, ''))) = 0
       and position('kitchen' in lower(coalesce(qual, ''))) = 0
