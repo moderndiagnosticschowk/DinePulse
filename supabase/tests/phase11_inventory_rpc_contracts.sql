@@ -2,7 +2,7 @@
 -- Run ONLY against a disposable/staging Supabase database after migration 0011.
 -- This script is read-only and raises an exception when a required contract fails.
 
-do $$
+do $phase11$
 declare
   v_proc regprocedure;
   v_rls_enabled boolean;
@@ -448,6 +448,6 @@ begin
   end if;
 
 end;
-$;
+$phase11$;
 
 select 'Phase 11 database contract assertions passed' as result;
