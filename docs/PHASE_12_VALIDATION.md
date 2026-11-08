@@ -134,3 +134,10 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Run the SQL preflight after migration 0012, then compare EXPLAIN (ANALYZE, BUFFERS) for recent orders, paid-order sales, order-item pagination and completed-payment mix before/after the four report indexes.
 - Verify row isolation using two authenticated users with disjoint branch memberships; catalog policy predicates alone are not an isolation test.
 - Production migration 0012 remains unapplied; no development branch was created because branch creation can incur compute charges. No production DDL or deployment was performed.
+
+## Daily implementation update (2026-11-08)
+- Extracted daily sales, best-seller and payment-mix aggregation into pure helpers in `apps/web/lib/report-aggregations.mjs`.
+- Daily trend aggregation now uses a single pass over paid orders plus the requested day buckets (O(orders + range)), rather than filtering the full order list once per day. It uses local calendar-day keys, zero-fills missing days, attributes by `paid_at`, and ignores invalid/missing timestamps and non-PAID rows when status is provided.
+- Best-seller and payment-method totals continue to aggregate integer paise. Payment mix additionally ignores non-COMPLETED rows if any are passed to the helper.
+- Added Node unit tests for zero-filled day buckets, payment-time attribution, partial payment aggregation, invalid dates/statuses, top-item grouping, payment-mix filtering and limits. CI now runs both report-money and report-aggregation test files.
+- No schema or production change. Migration 0012, two-branch row isolation, 500+ row pagination reconciliation, financial reconciliation and staging EXPLAIN/ANALYZE remain release gates.
