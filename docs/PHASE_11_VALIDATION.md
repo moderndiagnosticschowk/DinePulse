@@ -189,3 +189,9 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - The new orders_update policy is role-scoped but still permits CASHIER/WAITER UPDATE on the full row because the current SECURITY INVOKER create_pos_order RPC updates order totals after inserting lines. RLS cannot distinguish which columns those roles may update.
 - Before production, decide whether CASHIER/WAITER may directly change financial/order-state columns. If not, move all order mutations into narrowly scoped RPCs (including POS creation), then remove direct UPDATE grants/policies and add negative tests for grand_total, paid_at, status and discount tampering.
 - order_items_write also remains a broad ALL policy for OWNER/ADMIN/MANAGER/CASHIER/WAITER. Review direct item-edit flows and move sensitive line-total/kitchen-status changes behind explicit RPCs rather than expanding KITCHEN's direct table privileges.
+
+## Client table privilege hardening (2026-11-08)
+- The live production catalog shows `anon` and `authenticated` have table-level privileges on `orders`, `order_items` and `payments` that include `TRUNCATE`, `REFERENCES` and `TRIGGER`. `TRUNCATE` bypasses RLS, so this is a security-critical privilege boundary, not just a policy concern.
+- Migration 0011 now revokes all privileges on these three tables from `PUBLIC`/`anon`, and revokes `TRUNCATE`, `REFERENCES` and `TRIGGER` from `PUBLIC`/`authenticated`. Existing authenticated DML grants are retained for current RLS-guarded application paths.
+- The Phase 11 SQL contract test asserts that anon has no order/payment table privileges and authenticated has no non-DML table capabilities.
+- Staging must verify that service-role operations, cashier/waiter POS creation, Kitchen RPC updates, billing settlement, and report SELECTs still work after these revocations. Production has not been changed.
