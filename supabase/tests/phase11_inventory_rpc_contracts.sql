@@ -413,7 +413,41 @@ begin
     raise exception 'Order DELETE must be restricted to owner/admin/manager roles';
   end if;
 
+
+  -- RLS does not protect TRUNCATE. Anonymous clients must have no privileges
+  -- on order/payment tables, and authenticated clients must not have DDL-like
+  -- table capabilities that bypass row-level policies.
+  if has_table_privilege('anon', 'public.orders', 'SELECT')
+    or has_table_privilege('anon', 'public.orders', 'INSERT')
+    or has_table_privilege('anon', 'public.orders', 'UPDATE')
+    or has_table_privilege('anon', 'public.orders', 'DELETE')
+    or has_table_privilege('anon', 'public.orders', 'TRUNCATE')
+    or has_table_privilege('anon', 'public.order_items', 'SELECT')
+    or has_table_privilege('anon', 'public.order_items', 'INSERT')
+    or has_table_privilege('anon', 'public.order_items', 'UPDATE')
+    or has_table_privilege('anon', 'public.order_items', 'DELETE')
+    or has_table_privilege('anon', 'public.order_items', 'TRUNCATE')
+    or has_table_privilege('anon', 'public.payments', 'SELECT')
+    or has_table_privilege('anon', 'public.payments', 'INSERT')
+    or has_table_privilege('anon', 'public.payments', 'UPDATE')
+    or has_table_privilege('anon', 'public.payments', 'DELETE')
+    or has_table_privilege('anon', 'public.payments', 'TRUNCATE') then
+    raise exception 'anon must have no table privileges on orders, order_items or payments';
+  end if;
+
+  if has_table_privilege('authenticated', 'public.orders', 'TRUNCATE')
+    or has_table_privilege('authenticated', 'public.orders', 'REFERENCES')
+    or has_table_privilege('authenticated', 'public.orders', 'TRIGGER')
+    or has_table_privilege('authenticated', 'public.order_items', 'TRUNCATE')
+    or has_table_privilege('authenticated', 'public.order_items', 'REFERENCES')
+    or has_table_privilege('authenticated', 'public.order_items', 'TRIGGER')
+    or has_table_privilege('authenticated', 'public.payments', 'TRUNCATE')
+    or has_table_privilege('authenticated', 'public.payments', 'REFERENCES')
+    or has_table_privilege('authenticated', 'public.payments', 'TRIGGER') then
+    raise exception 'authenticated must not have TRUNCATE, REFERENCES or TRIGGER on POS transaction tables';
+  end if;
+
 end;
-$$;
+$;
 
 select 'Phase 11 database contract assertions passed' as result;
