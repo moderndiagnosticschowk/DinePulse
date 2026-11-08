@@ -715,3 +715,11 @@ using (
     array['OWNER','ADMIN','MANAGER']::public.membership_role[]
   )
 );
+
+-- Client roles must never hold non-RLS-governed table privileges on financial/order data.
+-- TRUNCATE bypasses row-level security; REFERENCES/TRIGGER are not browser capabilities.
+-- Keep authenticated DML privileges for the existing RLS-guarded POS flows.
+revoke all privileges on table public.orders, public.order_items, public.payments
+  from public, anon;
+revoke truncate, references, trigger on table public.orders, public.order_items, public.payments
+  from public, authenticated;
