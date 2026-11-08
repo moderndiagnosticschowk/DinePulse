@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatINR, fromMinorUnits, toMinorUnits } from '@/lib/report-money.mjs';
+import { buildDailySales, buildPaymentMix, buildTopItems } from '@/lib/report-aggregations.mjs';
 
 type OrderRow = {
   id: string;
@@ -16,7 +17,6 @@ type OrderRow = {
 };
 type ItemRow = { order_id: string; item_name: string; quantity: number | string; line_total: number | string };
 type PaymentRow = { order_id: string; payment_method: string; amount: number | string; status: string; paid_at: string | null };
-type DaySales = { label: string; sales: number; orders: number };
 type BranchSummary = { id: string; name: string; code: string | null };
 type Membership = {
   branch_id: string;
@@ -226,48 +226,11 @@ export default function ReportsPage() {
   const sales = fromMinorUnits(salesMinorUnits);
   const averageBill = paidOrders.length ? sales / paidOrders.length : 0;
 
-  const daily = useMemo<DaySales[]>(() => {
-    const result: DaySales[] = [];
-    const today = new Date();
-    for (let offset = range - 1; offset >= 0; offset -= 1) {
-      const day = new Date(today);
-      day.setHours(0, 0, 0, 0);
-      day.setDate(day.getDate() - offset);
-      const key = day.toLocaleDateString('en-CA');
-      const matching = paidOrders.filter(order => order.paid_at !== null && new Date(order.paid_at).toLocaleDateString('en-CA') === key);
-      result.push({
-        label: day.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-        sales: fromMinorUnits(matching.reduce((sum, order) => sum + toMinorUnits(order.grand_total), 0)),
-        orders: matching.length,
-      });
-    }
-    return result;
-  }, [paidOrders, range]);
+  const daily = useMemo(() => buildDailySales(paidOrders, range), [paidOrders, range]);
 
-  const topItems = useMemo(() => {
-    const grouped = new Map<string, { quantity: number; salesMinorUnits: number }>();
-    for (const item of items) {
-      const existing = grouped.get(item.item_name) ?? { quantity: 0, salesMinorUnits: 0 };
-      existing.quantity += Number(item.quantity);
-      existing.salesMinorUnits += toMinorUnits(item.line_total);
-      grouped.set(item.item_name, existing);
-    }
-    return [...grouped.entries()].map(([name, data]) => ({
-      name,
-      quantity: data.quantity,
-      sales: fromMinorUnits(data.salesMinorUnits),
-    })).sort((a, b) => b.quantity - a.quantity).slice(0, 8);
-  }, [items]);
+  const topItems = useMemo(() => buildTopItems(items), [items]);
 
-  const paymentMix = useMemo(() => {
-    const grouped = new Map<string, number>();
-    for (const payment of payments) {
-      grouped.set(payment.payment_method, (grouped.get(payment.payment_method) ?? 0) + toMinorUnits(payment.amount));
-    }
-    return [...grouped.entries()]
-      .map(([method, amountMinorUnits]) => [method, fromMinorUnits(amountMinorUnits)] as const)
-      .sort((a, b) => b[1] - a[1]);
-  }, [payments]);
+  const paymentMix = useMemo(() => buildPaymentMix(payments), [payments]);
 
   const maxSales = Math.max(1, ...daily.map(day => day.sales));
   const maxItemQty = Math.max(1, ...topItems.map(item => item.quantity));
