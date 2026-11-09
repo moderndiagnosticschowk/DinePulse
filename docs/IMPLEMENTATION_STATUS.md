@@ -1,6 +1,6 @@
 # DinePulse Implementation Status
 
-Last updated: 2026-11-06
+Last updated: 2026-11-09
 
 ## Phase review
 
@@ -12,7 +12,7 @@ Last updated: 2026-11-06
 | 7–8 | Inventory, recipes, suppliers, purchases and stock RPCs | UI/API present; Phase 11 hardening and live RPC compatibility still require staging validation |
 | 9 | Offline-ready POS | Browser menu cache, device-local queued drafts, reconnect retry and idempotent server RPC present; offline payment capture is not implemented |
 | 10 | Reporting | Base sales, daily trend, payment mix, best sellers and dashboard metrics present; financial reconciliation still required |
-| 11 | Inventory RPC security, stock reliability and atomic billing | Draft PR #1; adds movement validation, purchase/payment idempotency, durable consumption ledger, atomic full/partial settlement, server-side retry binding and two-decimal finite-amount enforcement. PR-head quality run #42161314549 passed; PostgreSQL staging/behavior tests remain pending |
+| 11 | Inventory RPC security, stock reliability, atomic billing and POS write isolation | Draft PR #1; adds movement validation, purchase/payment idempotency, durable consumption ledger, atomic full/partial settlement, KOT status RPC, helper hardening, and RPC-only writes for orders/order_items/payments. `create_pos_order` is SECURITY DEFINER with a fixed path; browser roles retain SELECT only on transaction tables. Latest 2026-11-08 code head passed CI; 2026-11-09 migration/test changes require their own CI and PostgreSQL staging/behavior tests remain pending |
 | 12 | Branch-aware reports and financial analytics | Draft PR #2; adds branch-scoped pagination, payment-time attribution, current open-order KPI, branch-relation normalization and INR paise-accurate aggregation. Code-fix run #219 passed; docs follow-up run #221 was still building at last check. Staging isolation/reconciliation remain pending |
 
 ## Phase 9 details
@@ -60,3 +60,11 @@ Last updated: 2026-11-06
 ## Verification honesty
 
 GitHub Actions proves SQL statement parsing, unit checks where configured, TypeScript, ESLint and production build only for the exact commit/run shown. It does not prove PostgreSQL migration execution, RLS row isolation, payment/stock transaction behavior or financial reconciliation. PR #1 and PR #2 remain open Drafts; `main` and production database are unchanged.
+
+
+## Daily verification update (2026-11-09)
+- Phase 11: mapped all current transaction-table write paths and moved POS order creation behind the guarded `create_pos_order` SECURITY DEFINER RPC. Migration 0011 now drops direct write policies on orders/order_items/payments and grants authenticated users SELECT only; billing settlement and KOT updates already use guarded SECURITY DEFINER RPCs. SQL contract tests now assert the RPC-only write boundary.
+- Phase 12: added a regression test for an order created before the selected report window but paid inside it, ensuring sales are attributed by `paid_at`; an order paid after the report end is excluded.
+- Production Supabase still has only the original two migration-history entries, no development branches, and zero rows in orders/order_items/payments/purchases/stock_movements. Migration 0011/0012 have not been applied. No production DDL or deployment was performed.
+- Latest completed CI before today's changes was Phase 11 run #276 and Phase 12 run #272. The 2026-11-09 commits require fresh workflows; do not carry forward old green results to new heads.
+- The staging database remains unavailable. Supabase branch creation can incur compute charges and requires cost review/approval before creating one.
