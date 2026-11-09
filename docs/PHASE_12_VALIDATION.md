@@ -141,3 +141,10 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Best-seller and payment-method totals continue to aggregate integer paise. Payment mix additionally ignores non-COMPLETED rows if any are passed to the helper.
 - Added Node unit tests for zero-filled day buckets, payment-time attribution, partial payment aggregation, invalid dates/statuses, top-item grouping, payment-mix filtering and limits. CI now runs both report-money and report-aggregation test files.
 - No schema or production change. Migration 0012, two-branch row isolation, 500+ row pagination reconciliation, financial reconciliation and staging EXPLAIN/ANALYZE remain release gates.
+
+
+## Daily implementation update (2026-11-09)
+- Added a regression test proving sales attribution is based on `orders.paid_at`, not creation time: an order created before the selected 7-day window but paid inside it contributes to today's sales; an order created inside the window but paid after the report end is excluded.
+- The report page already uses a separate paginated `paid_at` query for paid sales and a `created_at` query for recent orders; this test protects that distinction at the aggregation boundary.
+- The new test is committed to the Phase 12 branch. Its own GitHub Actions run must pass before the code check is marked green.
+- Migration 0012, two-branch isolation, 500+ row pagination reconciliation, payment-time SQL reconciliation and staging EXPLAIN/ANALYZE remain pending. No production changes were made.
