@@ -195,3 +195,13 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Migration 0011 now revokes all privileges on these three tables from `PUBLIC`/`anon`, and revokes `TRUNCATE`, `REFERENCES` and `TRIGGER` from `PUBLIC`/`authenticated`. Existing authenticated DML grants are retained for current RLS-guarded application paths.
 - The Phase 11 SQL contract test asserts that anon has no order/payment table privileges and authenticated has no non-DML table capabilities.
 - Staging must verify that service-role operations, cashier/waiter POS creation, Kitchen RPC updates, billing settlement, and report SELECTs still work after these revocations. Production has not been changed.
+
+
+## Daily implementation update (2026-11-09) — RPC-only POS transaction writes
+- Mapped the current web write paths: POS order creation uses `create_pos_order`; billing uses `settle_order_payment`; kitchen status changes use `update_kitchen_item_status`. The browser only reads `orders`, `order_items` and `payments` directly. The Express inventory router does not write these three tables.
+- Migration 0011 now converts `create_pos_order` to SECURITY DEFINER with `search_path = pg_catalog, public`. Its existing body validates `auth.uid()`, branch role, table ownership, menu-item branch/availability, quantity limits and the branch-scoped client-order idempotency key.
+- Removed the direct write policies `orders_write/orders_insert/orders_update/orders_delete`, `order_items_write` and `payments_write`. Existing SELECT policies remain the browser read boundary.
+- Revoked all table privileges on `orders`, `order_items` and `payments` from PUBLIC/anon/authenticated, then granted SELECT only to authenticated. All browser writes must now go through the three guarded RPCs; service-role privileges are not changed by these revokes.
+- Updated SQL contract assertions to require SECURITY DEFINER/fixed search_path/explicit branch-role check on `create_pos_order`, authenticated SELECT, no authenticated direct DML, and no write policies on the three transaction tables.
+- The migration and contract-test commits are on the Phase 11 branch. SQL parsing and the new workflow result must be checked for these exact commits. PostgreSQL execution and role-behavior tests remain pending.
+- Production is unchanged. Do not apply migration 0011 until it passes on a schema-matched disposable/staging database, including POS creation, billing settlement, KOT updates, report SELECTs, branch isolation, and denial of direct INSERT/UPDATE/DELETE/TRUNCATE for client roles.
