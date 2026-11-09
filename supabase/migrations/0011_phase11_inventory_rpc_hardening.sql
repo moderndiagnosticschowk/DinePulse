@@ -675,51 +675,34 @@ $$;
 revoke execute on function public.update_kitchen_item_status(uuid, public.kitchen_item_status) from public, anon;
 grant execute on function public.update_kitchen_item_status(uuid, public.kitchen_item_status) to authenticated;
 
--- Replace the broad FOR ALL orders policy with operation-specific branch roles.
--- POS creation runs through create_pos_order (SECURITY INVOKER), so cashier/waiter
--- retain INSERT/UPDATE needed by that RPC; only managers/admins/owners may delete.
+-- Route every order/order-item/payment write through a guarded RPC.
+-- create_pos_order was originally SECURITY INVOKER and needed broad table DML
+-- grants/RLS policies. Its body already validates auth.uid(), branch role,
+-- table ownership, menu-item branch/availability, quantity and idempotency.
+-- Run it as the function owner so browser roles do not need direct DML grants.
+alter function public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)
+  security definer;
+alter function public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)
+  set search_path = pg_catalog, public;
+revoke all on function public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)
+  from public, anon;
+grant execute on function public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)
+  to authenticated;
+
+-- Remove every direct write policy from transaction tables. Reads remain
+-- branch-scoped through the existing *_select policies. Writes are performed by
+-- create_pos_order, settle_order_payment and update_kitchen_item_status only.
 drop policy if exists orders_write on public.orders;
 drop policy if exists orders_insert on public.orders;
 drop policy if exists orders_update on public.orders;
 drop policy if exists orders_delete on public.orders;
+drop policy if exists order_items_write on public.order_items;
+drop policy if exists payments_write on public.payments;
 
-create policy orders_insert on public.orders
-for insert to authenticated
-with check (
-  public.user_has_branch_role(
-    branch_id,
-    array['OWNER','ADMIN','MANAGER','CASHIER','WAITER']::public.membership_role[]
-  )
-);
-
-create policy orders_update on public.orders
-for update to authenticated
-using (
-  public.user_has_branch_role(
-    branch_id,
-    array['OWNER','ADMIN','MANAGER','CASHIER','WAITER']::public.membership_role[]
-  )
-)
-with check (
-  public.user_has_branch_role(
-    branch_id,
-    array['OWNER','ADMIN','MANAGER','CASHIER','WAITER']::public.membership_role[]
-  )
-);
-
-create policy orders_delete on public.orders
-for delete to authenticated
-using (
-  public.user_has_branch_role(
-    branch_id,
-    array['OWNER','ADMIN','MANAGER']::public.membership_role[]
-  )
-);
-
--- Client roles must never hold non-RLS-governed table privileges on financial/order data.
--- TRUNCATE bypasses row-level security; REFERENCES/TRIGGER are not browser capabilities.
--- Keep authenticated DML privileges for the existing RLS-guarded POS flows.
+-- RLS does not protect TRUNCATE, and broad UPDATE policies allow financial/status
+-- column tampering. Revoke all client table privileges, then restore SELECT only
+-- for authenticated users; guarded SECURITY DEFINER RPCs own all writes.
 revoke all privileges on table public.orders, public.order_items, public.payments
-  from public, anon;
-revoke truncate, references, trigger on table public.orders, public.order_items, public.payments
-  from public, authenticated;
+  from public, anon, authenticated;
+grant select on table public.orders, public.order_items, public.payments
+  to authenticated;
