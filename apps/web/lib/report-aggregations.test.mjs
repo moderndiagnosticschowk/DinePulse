@@ -63,3 +63,28 @@ test('payment mix sums completed partial transactions and excludes non-completed
 
   assert.deepEqual(result, [['UPI', 0.5], ['CASH', 0.3]]);
 });
+
+test('attributes sales to paid_at when an order was created before the selected window', () => {
+  const now = new Date(2026, 10, 8, 12, 0, 0);
+  const oldCreatedAt = new Date(2026, 9, 20, 9, 0, 0).toISOString();
+  const paidToday = new Date(2026, 10, 8, 9, 0, 0).toISOString();
+  const paidAfterWindow = new Date(2026, 10, 9, 9, 0, 0).toISOString();
+
+  const result = buildDailySales([
+    {
+      status: 'PAID',
+      created_at: oldCreatedAt,
+      paid_at: paidToday,
+      grand_total: '125.50',
+    },
+    {
+      status: 'PAID',
+      created_at: new Date(2026, 10, 8, 8, 0, 0).toISOString(),
+      paid_at: paidAfterWindow,
+      grand_total: '900.00',
+    },
+  ], 7, now);
+
+  assert.equal(result.at(-1).sales, 125.5);
+  assert.equal(result.at(-1).orders, 1);
+});
