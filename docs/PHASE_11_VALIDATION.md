@@ -175,27 +175,25 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - The live public.orders_write policy is FOR ALL and only checks branch membership; authenticated also has table SELECT/INSERT/UPDATE/DELETE privileges. Migration 0011 now drops that broad policy and creates operation-specific policies: INSERT/UPDATE for OWNER/ADMIN/MANAGER/CASHIER/WAITER (matching the SECURITY INVOKER create_pos_order RPC), and DELETE for OWNER/ADMIN/MANAGER only. The production policy remains broad until migration 0011 is applied; staging must prove cashier/waiter order creation still works while KITCHEN/INVENTORY_MANAGER and unauthorized delete attempts are denied.
 - Production currently has zero orders/order_items/payments/purchases/stock_movements, so use seeded staging fixtures. No production DDL or deployment was performed.
 
-## Additional role-behavior acceptance tests (2026-11-07)
-1. Confirm migration removes orders_write and creates orders_insert/orders_update/orders_delete.
-2. OWNER/ADMIN/MANAGER/CASHIER/WAITER can create/update orders through the intended POS flow; KITCHEN and INVENTORY_MANAGER cannot directly insert/update orders.
-3. Only OWNER/ADMIN/MANAGER can delete orders; CASHIER/WAITER/KITCHEN/INVENTORY_MANAGER deletion attempts must be denied.
-4. Confirm create_pos_order remains SECURITY INVOKER with its own user_has_branch_role check and still creates orders for CASHIER/WAITER after the RLS policy split.
-5. A KITCHEN member can advance NEW -> PREPARING -> READY through update_kitchen_item_status, but direct order_items UPDATE remains denied by RLS.
-6. A WAITER can advance READY -> SERVED; other roles must follow the explicit RPC role matrix.
-7. Repeating the same target status after a lost response returns the current row without a second transition; invalid/backward transitions are rejected.
-8. Cross-branch order-item IDs and users without active membership are rejected by the KOT RPC.
+## RPC-only POS write authorization acceptance tests (2026-11-09)
+1. Confirm migration removes all write policies from `orders`, `order_items`, and `payments`, while retaining the branch-scoped SELECT policies.
+2. Confirm `create_pos_order` is SECURITY DEFINER, uses `search_path=pg_catalog,public`, checks `auth.uid()` and branch role, and is executable by authenticated but not anon.
+3. Confirm authenticated retains SELECT on all three transaction tables but has no direct INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES or TRIGGER privileges.
+4. Confirm anon has no table privileges on orders, order_items or payments.
+5. OWNER/ADMIN/MANAGER/CASHIER/WAITER can create an order through `create_pos_order`; KITCHEN and INVENTORY_MANAGER are denied.
+6. Attempt direct INSERT/UPDATE/DELETE against each transaction table as CASHIER, WAITER, KITCHEN and INVENTORY_MANAGER; every direct write must be denied regardless of row policy.
+7. Confirm billing full/partial settlement still works through `settle_order_payment`, including duplicate retries, changed-payload rejection and stock rollback.
+8. Confirm Kitchen can advance NEW -> PREPARING -> READY and WAITER can mark READY -> SERVED only through `update_kitchen_item_status`; same-target retries are idempotent and backward transitions are rejected.
+9. Confirm two users with disjoint branch memberships cannot read or mutate each other's orders, items or payments.
+10. Confirm authenticated report SELECT queries continue to work after direct DML revocation.
+11. Confirm service-role and database-owner maintenance paths remain unaffected by client-role revokes.
 
-## Remaining column-level authorization review (2026-11-07)
-- The new orders_update policy is role-scoped but still permits CASHIER/WAITER UPDATE on the full row because the current SECURITY INVOKER create_pos_order RPC updates order totals after inserting lines. RLS cannot distinguish which columns those roles may update.
-- Before production, decide whether CASHIER/WAITER may directly change financial/order-state columns. If not, move all order mutations into narrowly scoped RPCs (including POS creation), then remove direct UPDATE grants/policies and add negative tests for grand_total, paid_at, status and discount tampering.
-- order_items_write also remains a broad ALL policy for OWNER/ADMIN/MANAGER/CASHIER/WAITER. Review direct item-edit flows and move sensitive line-total/kitchen-status changes behind explicit RPCs rather than expanding KITCHEN's direct table privileges.
-
-## Client table privilege hardening (2026-11-08)
-- The live production catalog shows `anon` and `authenticated` have table-level privileges on `orders`, `order_items` and `payments` that include `TRUNCATE`, `REFERENCES` and `TRIGGER`. `TRUNCATE` bypasses RLS, so this is a security-critical privilege boundary, not just a policy concern.
-- Migration 0011 now revokes all privileges on these three tables from `PUBLIC`/`anon`, and revokes `TRUNCATE`, `REFERENCES` and `TRIGGER` from `PUBLIC`/`authenticated`. Existing authenticated DML grants are retained for current RLS-guarded application paths.
-- The Phase 11 SQL contract test asserts that anon has no order/payment table privileges and authenticated has no non-DML table capabilities.
-- Staging must verify that service-role operations, cashier/waiter POS creation, Kitchen RPC updates, billing settlement, and report SELECTs still work after these revocations. Production has not been changed.
-
+## POS transaction table privilege hardening (2026-11-09)
+- All browser writes to orders/order_items/payments are now routed through the guarded `create_pos_order`, `settle_order_payment`, and `update_kitchen_item_status` SECURITY DEFINER RPCs.
+- `create_pos_order` was converted from SECURITY INVOKER to SECURITY DEFINER after verifying its body performs explicit authentication, branch-role, table, menu-item, quantity and idempotency checks.
+- The previous broad `orders_write`, operation-specific order write policies, `order_items_write`, and `payments_write` policies are dropped. Existing SELECT policies remain.
+- Authenticated receives SELECT only on these three tables. Anon receives no privileges. This removes full-row financial/status tampering and direct payment/item writes rather than relying on broad role-based UPDATE policies.
+- The migration and SQL contract test must pass on staging before production. No production DDL or deployment has been performed.
 
 ## Daily implementation update (2026-11-09) — RPC-only POS transaction writes
 - Mapped the current web write paths: POS order creation uses `create_pos_order`; billing uses `settle_order_payment`; kitchen status changes use `update_kitchen_item_status`. The browser only reads `orders`, `order_items` and `payments` directly. The Express inventory router does not write these three tables.
