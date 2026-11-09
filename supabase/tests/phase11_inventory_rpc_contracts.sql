@@ -328,91 +328,51 @@ begin
   end if;
 
 
-  -- Orders must not retain the old broad FOR ALL branch-membership write policy.
+  -- All POS transaction writes must use guarded SECURITY DEFINER RPCs.
+  -- Browser roles retain SELECT only; no broad table DML policy may remain.
   if exists (
     select 1 from pg_policies
     where schemaname = 'public'
-      and tablename = 'orders'
-      and policyname = 'orders_write'
+      and tablename in ('orders', 'order_items', 'payments')
+      and cmd <> 'SELECT'
   ) then
-    raise exception 'Broad orders_write policy must be removed';
+    raise exception 'Direct write policies must be removed from orders, order_items and payments';
   end if;
 
-  -- POS creation must remain SECURITY INVOKER and perform its own role check;
-  -- the new INSERT/UPDATE RLS policies are deliberately aligned to that contract.
-  if not exists (
-    select 1 from pg_proc
-    where oid = 'public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)'::regprocedure
-      and not prosecdef
-      and position('user_has_branch_role' in lower(pg_get_functiondef(oid))) > 0
-  ) then
-    raise exception 'create_pos_order must remain SECURITY INVOKER with explicit branch-role authorization';
+  select prosecdef,
+         replace(coalesce(array_to_string(proconfig, ','), ''), ' ', ''),
+         lower(pg_get_functiondef(oid))
+    into v_security_definer, v_function_config, v_function_def
+  from pg_proc
+  where oid = 'public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)'::regprocedure;
+  if not coalesce(v_security_definer, false)
+    or position('search_path=pg_catalog,public' in coalesce(v_function_config, '')) = 0
+    or position('user_has_branch_role' in coalesce(v_function_def, '')) = 0 then
+    raise exception 'create_pos_order must be SECURITY DEFINER, fixed-path and enforce branch roles';
+  end if;
+  if has_function_privilege('anon', 'public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.create_pos_order(uuid,text,public.order_type,uuid,jsonb,text)', 'EXECUTE') then
+    raise exception 'create_pos_order must deny anon and allow authenticated execution';
   end if;
 
-  if not exists (
-    select 1 from pg_policies
-    where schemaname = 'public'
-      and tablename = 'orders'
-      and policyname = 'orders_insert'
-      and cmd = 'INSERT'
-      and 'authenticated' = any(roles)
-      and position('user_has_branch_role' in lower(coalesce(with_check, ''))) > 0
-  ) or not exists (
-    select 1 from pg_policies
-    where schemaname = 'public'
-      and tablename = 'orders'
-      and policyname = 'orders_update'
-      and cmd = 'UPDATE'
-      and 'authenticated' = any(roles)
-      and position('user_has_branch_role' in lower(coalesce(qual, ''))) > 0
-      and position('user_has_branch_role' in lower(coalesce(with_check, ''))) > 0
-  ) then
-    raise exception 'Order INSERT/UPDATE policies must enforce branch roles in both USING and WITH CHECK';
+  -- Authenticated clients may read branch-scoped rows, but cannot insert/update/delete
+  -- orders, order items or payments directly. The guarded RPCs are the only write path.
+  if not has_table_privilege('authenticated', 'public.orders', 'SELECT')
+    or not has_table_privilege('authenticated', 'public.order_items', 'SELECT')
+    or not has_table_privilege('authenticated', 'public.payments', 'SELECT') then
+    raise exception 'authenticated must retain SELECT on POS transaction tables';
   end if;
-
-  if not exists (
-    select 1 from pg_policies
-    where schemaname = 'public'
-      and tablename = 'orders'
-      and policyname = 'orders_insert'
-      and position('cashier' in lower(coalesce(with_check, ''))) > 0
-      and position('waiter' in lower(coalesce(with_check, ''))) > 0
-      and position('kitchen' in lower(coalesce(with_check, ''))) = 0
-      and position('inventory_manager' in lower(coalesce(with_check, ''))) = 0
-  ) or not exists (
-    select 1 from pg_policies
-    where schemaname = 'public'
-      and tablename = 'orders'
-      and policyname = 'orders_update'
-      and position('cashier' in lower(coalesce(qual, ''))) > 0
-      and position('waiter' in lower(coalesce(qual, ''))) > 0
-      and position('kitchen' in lower(coalesce(qual, ''))) = 0
-      and position('inventory_manager' in lower(coalesce(qual, ''))) = 0
-      and position('cashier' in lower(coalesce(with_check, ''))) > 0
-      and position('waiter' in lower(coalesce(with_check, ''))) > 0
-  ) then
-    raise exception 'Order INSERT/UPDATE must allow cashier/waiter POS flows but exclude kitchen/inventory manager roles';
+  if has_table_privilege('authenticated', 'public.orders', 'INSERT')
+    or has_table_privilege('authenticated', 'public.orders', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.orders', 'DELETE')
+    or has_table_privilege('authenticated', 'public.order_items', 'INSERT')
+    or has_table_privilege('authenticated', 'public.order_items', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.order_items', 'DELETE')
+    or has_table_privilege('authenticated', 'public.payments', 'INSERT')
+    or has_table_privilege('authenticated', 'public.payments', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.payments', 'DELETE') then
+    raise exception 'authenticated must not have direct DML on POS transaction tables';
   end if;
-
-  if not exists (
-    select 1 from pg_policies
-    where schemaname = 'public'
-      and tablename = 'orders'
-      and policyname = 'orders_delete'
-      and cmd = 'DELETE'
-      and 'authenticated' = any(roles)
-      and position('user_has_branch_role' in lower(coalesce(qual, ''))) > 0
-      and position('owner' in lower(coalesce(qual, ''))) > 0
-      and position('admin' in lower(coalesce(qual, ''))) > 0
-      and position('manager' in lower(coalesce(qual, ''))) > 0
-      and position('cashier' in lower(coalesce(qual, ''))) = 0
-      and position('waiter' in lower(coalesce(qual, ''))) = 0
-      and position('kitchen' in lower(coalesce(qual, ''))) = 0
-      and position('inventory_manager' in lower(coalesce(qual, ''))) = 0
-  ) then
-    raise exception 'Order DELETE must be restricted to owner/admin/manager roles';
-  end if;
-
 
   -- RLS does not protect TRUNCATE. Anonymous clients must have no privileges
   -- on order/payment tables, and authenticated clients must not have DDL-like
