@@ -60,3 +60,9 @@ Last updated: 2026-11-06
 ## Verification honesty
 
 GitHub Actions proves SQL statement parsing, unit checks where configured, TypeScript, ESLint and production build only for the exact commit/run shown. It does not prove PostgreSQL migration execution, RLS row isolation, payment/stock transaction behavior or financial reconciliation. PR #1 and PR #2 remain open Drafts; `main` and production database are unchanged.
+
+
+## Daily verification update (2026-11-10)
+- Phase 11: production catalog review found `rls_auto_enable()` is a SECURITY DEFINER `event_trigger` function bound to the enabled `ensure_rls` DDL event trigger. Migration 0011 now revokes direct EXECUTE from PUBLIC/anon/authenticated while retaining the registered database event trigger. Contract tests assert the event trigger binding remains enabled and client roles cannot execute the function.
+- Phase 12: added leap-day and year-boundary daily-bucket regression coverage. Schema review found `branches` has no timezone column and report UTC bounds/day grouping currently use the browser timezone. This is documented as a limitation; use `Asia/Kolkata` consistently for the current India rollout and add branch IANA timezone support before multi-timezone expansion.
+- Both PRs remain Draft. No production migration or main-branch change was made. Staging migration execution and behavioral acceptance remain mandatory.
