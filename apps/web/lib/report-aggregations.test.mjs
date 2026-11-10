@@ -88,3 +88,28 @@ test('attributes sales to paid_at when an order was created before the selected 
   assert.equal(result.at(-1).sales, 125.5);
   assert.equal(result.at(-1).orders, 1);
 });
+
+
+test('keeps calendar buckets continuous across leap day and year boundaries', () => {
+  const leapDayNow = new Date(2024, 2, 1, 12, 0, 0);
+  const leapResult = buildDailySales([
+    { status: 'PAID', paid_at: new Date(2024, 1, 29, 12, 0, 0).toISOString(), grand_total: '10.00' },
+    { status: 'PAID', paid_at: new Date(2024, 2, 1, 9, 0, 0).toISOString(), grand_total: '20.00' },
+  ], 7, leapDayNow);
+
+  assert.equal(leapResult.length, 7);
+  assert.equal(leapResult.at(-2).sales, 10);
+  assert.equal(leapResult.at(-2).orders, 1);
+  assert.equal(leapResult.at(-1).sales, 20);
+  assert.equal(leapResult.at(-1).orders, 1);
+
+  const yearEndNow = new Date(2027, 0, 2, 12, 0, 0);
+  const yearResult = buildDailySales([
+    { status: 'PAID', paid_at: new Date(2026, 11, 31, 12, 0, 0).toISOString(), grand_total: '31.00' },
+    { status: 'PAID', paid_at: new Date(2027, 0, 1, 12, 0, 0).toISOString(), grand_total: '1.00' },
+  ], 7, yearEndNow);
+
+  assert.equal(yearResult.length, 7);
+  assert.equal(yearResult.at(-3).sales, 31);
+  assert.equal(yearResult.at(-2).sales, 1);
+});
