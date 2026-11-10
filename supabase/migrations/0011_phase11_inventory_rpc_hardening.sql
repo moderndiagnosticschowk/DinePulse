@@ -600,6 +600,11 @@ grant execute on function public.user_has_branch_role(uuid, public.membership_ro
 grant execute on function public.user_has_company_access(uuid) to authenticated;
 grant execute on function public.user_is_branch_owner_or_admin(uuid) to authenticated;
 
+-- This SECURITY DEFINER function is invoked only by the database-owned ensure_rls
+-- event trigger. It is not an application RPC, so client roles need no EXECUTE.
+-- PostgreSQL's event-trigger manager invokes the registered function internally.
+revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+
 -- Allow kitchen staff to advance only the KOT status, without granting them
 -- direct UPDATE access to the full order_items row.
 create or replace function public.update_kitchen_item_status(
