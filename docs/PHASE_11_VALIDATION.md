@@ -203,3 +203,11 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Updated SQL contract assertions to require SECURITY DEFINER/fixed search_path/explicit branch-role check on `create_pos_order`, authenticated SELECT, no authenticated direct DML, and no write policies on the three transaction tables.
 - The migration and contract-test commits are on the Phase 11 branch. SQL parsing and the new workflow result must be checked for these exact commits. PostgreSQL execution and role-behavior tests remain pending.
 - Production is unchanged. Do not apply migration 0011 until it passes on a schema-matched disposable/staging database, including POS creation, billing settlement, KOT updates, report SELECTs, branch isolation, and denial of direct INSERT/UPDATE/DELETE/TRUNCATE for client roles.
+
+
+## Daily implementation update — 2026-11-10
+
+- Live advisor/catalog review confirmed `public.rls_auto_enable()` is a SECURITY DEFINER function returning `event_trigger`, registered to the enabled `ensure_rls` `ddl_command_end` event trigger. It still had EXECUTE grants to PUBLIC, anon and authenticated.
+- Migration 0011 now revokes client EXECUTE on this internal event-trigger function. PostgreSQL's event-trigger manager invokes registered functions internally; the trigger remains registered/enabled. This does not grant client roles any DDL capability.
+- The Phase 11 SQL contract test now asserts the `ensure_rls` trigger remains enabled/bound and that anon/authenticated cannot execute the function directly.
+- This is code-only until migration 0011 is applied on a schema-matched staging database; the production advisor will continue to show the old grant until then.
