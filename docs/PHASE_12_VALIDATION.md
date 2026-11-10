@@ -148,3 +148,11 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - The report page already uses a separate paginated `paid_at` query for paid sales and a `created_at` query for recent orders; this test protects that distinction at the aggregation boundary.
 - The new test is committed to the Phase 12 branch. Its own GitHub Actions run must pass before the code check is marked green.
 - Migration 0012, two-branch isolation, 500+ row pagination reconciliation, payment-time SQL reconciliation and staging EXPLAIN/ANALYZE remain pending. No production changes were made.
+
+
+## Daily implementation update — 2026-11-10
+
+- Added a calendar-boundary regression test covering leap day (29 February 2024) and year rollover (31 December 2026 to 1 January 2027). This protects zero-filled local-day buckets from month/year arithmetic regressions.
+- Live schema inspection confirms `public.branches` currently has no IANA timezone column. The report page derives UTC query boundaries from the browser's local midnight, and daily aggregation also groups by the browser's local calendar day.
+- **Known limitation:** this is consistent only when the report viewer's timezone matches the restaurant branch timezone. Before supporting branches across time zones or users viewing reports while travelling, add a validated `branches.time_zone` field (backfill the current India deployment to `Asia/Kolkata`) and compute both UTC query bounds and daily buckets in that branch timezone. Do not silently treat browser timezone as branch timezone.
+- For the current India-only rollout, acceptance must confirm branch operators use `Asia/Kolkata`; multi-timezone reporting remains a release gate before expanding geography.
