@@ -292,6 +292,30 @@ begin
   end if;
 
 
+  -- rls_auto_enable is a database-owned event-trigger function, not a client RPC.
+  if not exists (
+    select 1
+    from pg_event_trigger e
+    where e.evtname = 'ensure_rls'
+      and e.evtevent = 'ddl_command_end'
+      and e.evtenabled = 'O'
+      and e.evtfoid = 'public.rls_auto_enable()'::regprocedure
+  ) then
+    raise exception 'ensure_rls event trigger must remain enabled and bound to rls_auto_enable';
+  end if;
+  if not exists (
+    select 1 from pg_proc
+    where oid = 'public.rls_auto_enable()'::regprocedure
+      and prosecdef
+      and prorettype = 'event_trigger'::regtype
+  ) then
+    raise exception 'rls_auto_enable must remain a SECURITY DEFINER event-trigger function';
+  end if;
+  if has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.rls_auto_enable()', 'EXECUTE') then
+    raise exception 'client roles must not execute the internal rls_auto_enable event-trigger function';
+  end if;
+
   -- Kitchen users must update only the KOT status through a guarded RPC.
   if not exists (
     select 1 from pg_proc
