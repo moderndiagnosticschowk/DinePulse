@@ -83,7 +83,10 @@ export default function ReportsPage() {
     }
   }, [range]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const paidOrders = useMemo(() => orders.filter(order => order.status === 'PAID'), [orders]);
   const sales = paidOrders.reduce((sum, order) => sum + Number(order.grand_total), 0);
