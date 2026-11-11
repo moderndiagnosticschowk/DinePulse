@@ -21,6 +21,24 @@ begin
     raise exception 'create_purchase signature/return contract mismatch';
   end if;
 
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'purchases'
+      and column_name = 'idempotency_payload_hash'
+      and data_type = 'text'
+  ) then
+    raise exception 'purchases.idempotency_payload_hash is required for request-bound retries';
+  end if;
+  v_function_def := lower(pg_get_functiondef(
+    'public.create_purchase(uuid,uuid,uuid,text,date,numeric,text,numeric,text,jsonb,text)'::regprocedure
+  ));
+  if position('v_purchase.idempotency_payload_hash is distinct from v_payload_hash' in v_function_def) = 0
+    or position('purchase idempotency key was reused with different details' in v_function_def) = 0
+    or position('md5(jsonb_build_object' in v_function_def) = 0 then
+    raise exception 'create_purchase must bind idempotency keys to a canonical request fingerprint';
+  end if;
+
   v_proc := to_regprocedure('public.receive_purchase(uuid,uuid,uuid)');
   if v_proc is null or (select prorettype from pg_proc where oid = v_proc) <> 'public.purchases'::regtype then
     raise exception 'receive_purchase signature/return contract mismatch';
