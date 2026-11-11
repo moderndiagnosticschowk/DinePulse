@@ -1,13 +1,17 @@
 import { fromMinorUnits, toMinorUnits } from './report-money.mjs';
+import {
+  DEFAULT_REPORT_TIME_ZONE,
+  addCalendarDays,
+  formatZonedDayLabel,
+  getZonedDateKey,
+} from './report-date-time.mjs';
 
-function localDayKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-export function buildDailySales(paidOrders, range, now = new Date()) {
+export function buildDailySales(
+  paidOrders,
+  range,
+  now = new Date(),
+  timeZone = DEFAULT_REPORT_TIME_ZONE,
+) {
   if (![7, 30, 90].includes(range)) {
     throw new RangeError('Report range must be 7, 30 or 90 days');
   }
@@ -15,28 +19,26 @@ export function buildDailySales(paidOrders, range, now = new Date()) {
     throw new TypeError('Report reference time must be a valid Date');
   }
 
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
+  const todayKey = getZonedDateKey(now, timeZone);
   const buckets = new Map();
 
   for (let offset = range - 1; offset >= 0; offset -= 1) {
-    const day = new Date(today);
-    day.setDate(day.getDate() - offset);
-    buckets.set(localDayKey(day), {
-      label: day.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+    const dayKey = addCalendarDays(todayKey, -offset);
+    buckets.set(dayKey, {
+      label: formatZonedDayLabel(dayKey, timeZone),
       salesMinorUnits: 0,
       orders: 0,
     });
   }
 
-  // One pass over paid orders: O(range + orders), rather than filtering all
-  // orders once for every displayed day.
+  // One pass over paid orders: O(range + orders), using the branch timezone
+  // rather than the viewer's browser timezone for date attribution.
   for (const order of paidOrders) {
     if (order.status !== undefined && order.status !== 'PAID') continue;
     if (!order.paid_at) continue;
     const paidAt = new Date(order.paid_at);
     if (!Number.isFinite(paidAt.getTime())) continue;
-    const bucket = buckets.get(localDayKey(paidAt));
+    const bucket = buckets.get(getZonedDateKey(paidAt, timeZone));
     if (!bucket) continue;
     bucket.salesMinorUnits += toMinorUnits(order.grand_total);
     bucket.orders += 1;
