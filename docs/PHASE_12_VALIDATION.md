@@ -163,3 +163,7 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Added regression tests for India midnight attribution, UTC query-window boundaries, invalid timezone identifiers, leap day and year transition.
 - The branches table currently has no timezone column. Before multi-timezone rollout, add a validated branch-level IANA timezone field and load it into report queries; do not infer branch timezone from the manager's device.
 - Staging RLS, pagination, financial reconciliation and EXPLAIN/ANALYZE remain release gates.
+
+### CI correction follow-up
+- The first timezone-utility CI attempt exposed an over-escaped date-key regular expression. Corrected both YYYY-MM-DD validators in `report-date-time.mjs` in commit `eb8a2016c6d5c149e854da59c1fa7ceb254e4190`.
+- The earlier failed workflow ran before that correction and is not evidence against the corrected head; the next PR-head workflow must pass before this change is treated as code-verified.
