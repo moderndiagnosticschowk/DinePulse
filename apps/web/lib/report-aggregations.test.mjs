@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { buildDailySales, buildPaymentMix, buildTopItems } from './report-aggregations.mjs';
-import { DEFAULT_REPORT_TIME_ZONE, getReportWindow, getZonedDateKey } from './report-date-time.mjs';
+import { DEFAULT_REPORT_TIME_ZONE, getReportWindow, getZonedDateKey, resolveReportTimeZone } from './report-date-time.mjs';
 
 test('builds zero-filled local-day buckets and sums paid_at amounts in integer paise', () => {
   const now = new Date(2026, 10, 8, 12, 0, 0);
@@ -145,4 +145,12 @@ test('rejects invalid IANA timezone identifiers for report windows', () => {
     () => getReportWindow(new Date('2026-11-11T00:00:00.000Z'), 7, 'Not/A_Timezone'),
     RangeError,
   );
+});
+
+
+test('resolves report timezone from the related company object or array', () => {
+  assert.equal(resolveReportTimeZone({ timezone: 'Asia/Kolkata' }), 'Asia/Kolkata');
+  assert.equal(resolveReportTimeZone([{ timezone: 'Asia/Dubai' }]), 'Asia/Dubai');
+  assert.equal(resolveReportTimeZone(null), DEFAULT_REPORT_TIME_ZONE);
+  assert.throws(() => resolveReportTimeZone({ timezone: 'Not/A_Timezone' }), RangeError);
 });
