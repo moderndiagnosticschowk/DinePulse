@@ -75,3 +75,8 @@ GitHub Actions proves SQL statement parsing, unit checks where configured, TypeS
 - Read-only Supabase schema inspection found that `companies.timezone` already exists with default `Asia/Kolkata`, and `branches.company_id` references `companies.id`. The report page now loads the selected branch's related company timezone rather than relying on a hardcoded India timezone or browser timezone.
 - Added object/array/null/invalid company-timezone resolution tests. Branch-specific timezone overrides remain a future schema enhancement only if branches under the same company need different timezones.
 - The first timezone CI run failed because the new date-key regex was over-escaped; that was corrected, and the latest head is being revalidated. Do not treat the earlier failed run as the final result.
+
+
+### Daily implementation update (2026-11-11 — report typing)
+- Added TypeScript declarations for the timezone utility and updated the aggregation helper declaration for its optional timezone parameter.
+- Report suite now has 16 tests (5 currency + 11 aggregation/timezone). Prior workflow #321 passed the 15 tests in its commit but failed typecheck/build due to missing declarations; the declarations are now in the PR branch and require a fresh full CI pass.
