@@ -211,3 +211,10 @@ The settlement function's dollar-quote delimiter was corrected on 2026-11-02 aft
 - Migration 0011 now revokes client EXECUTE on this internal event-trigger function. PostgreSQL's event-trigger manager invokes registered functions internally; the trigger remains registered/enabled. This does not grant client roles any DDL capability.
 - The Phase 11 SQL contract test now asserts the `ensure_rls` trigger remains enabled/bound and that anon/authenticated cannot execute the function directly.
 - This is code-only until migration 0011 is applied on a schema-matched staging database; the production advisor will continue to show the old grant until then.
+
+## Daily implementation update (2026-11-11)
+- Added `purchases.idempotency_payload_hash` and a canonical MD5 fingerprint over branch, supplier, invoice/date, tax/payment fields, notes and sorted line items.
+- A repeated purchase key now returns the original purchase only when the request fingerprint matches; changed payloads and legacy key rows without a verifiable fingerprint are rejected. The unique-violation race path performs the same comparison.
+- SQL contract assertions verify the fingerprint column and server-side mismatch rejection.
+- CI run #303 passed SQL parsing, dependency installation, TypeScript, ESLint and production build for the updated migration/test head.
+- Runtime PostgreSQL purchase concurrency and changed-payload tests remain staging acceptance gates.
