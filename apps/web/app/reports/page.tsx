@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatINR, fromMinorUnits, toMinorUnits } from '@/lib/report-money.mjs';
 import { buildDailySales, buildPaymentMix, buildTopItems } from '@/lib/report-aggregations.mjs';
+import { DEFAULT_REPORT_TIME_ZONE, getReportWindow } from '@/lib/report-date-time.mjs';
 
 type OrderRow = {
   id: string;
@@ -35,6 +36,7 @@ function getBranchSummary(membership: Membership): BranchSummary | null {
 
 export default function ReportsPage() {
   const [range, setRange] = useState<7 | 30 | 90>(7);
+  const [reportNow, setReportNow] = useState(() => new Date());
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [salesOrders, setSalesOrders] = useState<OrderRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
@@ -57,12 +59,10 @@ export default function ReportsPage() {
     setPayments([]);
     setOpenOrderCount(0);
     try {
-      const to = new Date();
-      const from = new Date(to);
-      from.setHours(0, 0, 0, 0);
-      from.setDate(from.getDate() - (range - 1));
-      const fromIso = from.toISOString();
-      const toIso = to.toISOString();
+      const reportNow = new Date();
+      const reportWindow = getReportWindow(reportNow, range, DEFAULT_REPORT_TIME_ZONE);
+      const fromIso = reportWindow.from.toISOString();
+      const toIso = reportNow.toISOString();
       const pageSize = 500;
       const rows: OrderRow[] = [];
       for (let offset = 0; ; offset += pageSize) {
@@ -158,6 +158,7 @@ export default function ReportsPage() {
       setItems(itemRows);
       setPayments(paymentRows);
       setOpenOrderCount(currentOpenOrderCount ?? 0);
+      setReportNow(reportNow);
     } catch (e) {
       if (requestId === loadRequestRef.current) {
         setError(e instanceof Error ? e.message : 'Unable to load reports.');
@@ -226,7 +227,10 @@ export default function ReportsPage() {
   const sales = fromMinorUnits(salesMinorUnits);
   const averageBill = paidOrders.length ? sales / paidOrders.length : 0;
 
-  const daily = useMemo(() => buildDailySales(paidOrders, range), [paidOrders, range]);
+  const daily = useMemo(
+    () => buildDailySales(paidOrders, range, reportNow, DEFAULT_REPORT_TIME_ZONE),
+    [paidOrders, range, reportNow],
+  );
 
   const topItems = useMemo(() => buildTopItems(items), [items]);
 
@@ -243,7 +247,7 @@ export default function ReportsPage() {
           <div>
             <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-slate-950">← Dashboard</Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Reports & Analytics</h1>
-            <p className="mt-1 text-sm text-slate-500">Reports for {selectedBranchName ?? 'your selected branch'}: sales, trends, best sellers and payment mix.</p>
+            <p className="mt-1 text-sm text-slate-500">Reports for {selectedBranchName ?? 'your selected branch'}: sales, trends, best sellers and payment mix · {DEFAULT_REPORT_TIME_ZONE}.</p>
           </div>
           {memberships.length > 1 && (
             <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
@@ -327,7 +331,7 @@ export default function ReportsPage() {
 
             <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between gap-3 p-5"><div><h2 className="text-lg font-black">Recent orders</h2><p className="mt-1 text-sm text-slate-500">Latest orders in the selected period.</p></div><Link href="/orders" className="text-sm font-bold text-slate-600 hover:text-slate-950">All orders →</Link></div>
-              <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Date</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Total</th></tr></thead><tbody>{orders.slice(0, 12).map(order => <tr key={order.id} className="border-t border-slate-100"><td className="px-5 py-3 font-bold">#{order.order_number ?? order.id.slice(0, 8)}</td><td className="whitespace-nowrap px-5 py-3 text-slate-500">{new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td className="px-5 py-3">{order.order_type.replaceAll('_', ' ')}</td><td className="px-5 py-3"><span className={'rounded-full px-2.5 py-1 text-xs font-bold ' + (order.status === 'PAID' ? 'bg-emerald-100 text-emerald-800' : order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700')}>{order.status}</span></td><td className="px-5 py-3 text-right font-bold">{formatINR(Number(order.grand_total))}</td></tr>)}</tbody></table></div>
+              <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Date</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Total</th></tr></thead><tbody>{orders.slice(0, 12).map(order => <tr key={order.id} className="border-t border-slate-100"><td className="px-5 py-3 font-bold">#{order.order_number ?? order.id.slice(0, 8)}</td><td className="whitespace-nowrap px-5 py-3 text-slate-500">{new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: DEFAULT_REPORT_TIME_ZONE })}</td><td className="px-5 py-3">{order.order_type.replaceAll('_', ' ')}</td><td className="px-5 py-3"><span className={'rounded-full px-2.5 py-1 text-xs font-bold ' + (order.status === 'PAID' ? 'bg-emerald-100 text-emerald-800' : order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700')}>{order.status}</span></td><td className="px-5 py-3 text-right font-bold">{formatINR(Number(order.grand_total))}</td></tr>)}</tbody></table></div>
             </section>
           </>
         )}
