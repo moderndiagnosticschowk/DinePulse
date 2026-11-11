@@ -83,6 +83,15 @@ export function startOfZonedDay(dateKey, timeZone = DEFAULT_REPORT_TIME_ZONE) {
   throw new RangeError(`Could not resolve midnight for ${dateKey} in ${timeZone}`);
 }
 
+export function resolveReportTimeZone(companyRelation, fallback = DEFAULT_REPORT_TIME_ZONE) {
+  const company = Array.isArray(companyRelation) ? companyRelation[0] ?? null : companyRelation;
+  const configured = typeof company?.timezone === 'string' ? company.timezone.trim() : '';
+  const timeZone = configured || fallback;
+  // Fail visibly on invalid company configuration rather than silently shifting sales days.
+  new Intl.DateTimeFormat('en-US', { timeZone });
+  return timeZone;
+}
+
 export function getReportWindow(now, range, timeZone = DEFAULT_REPORT_TIME_ZONE) {
   const current = asValidDate(now);
   if (![7, 30, 90].includes(range)) {
