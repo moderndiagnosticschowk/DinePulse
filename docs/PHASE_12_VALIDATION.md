@@ -156,3 +156,10 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Live schema inspection confirms `public.branches` currently has no IANA timezone column. The report page derives UTC query boundaries from the browser's local midnight, and daily aggregation also groups by the browser's local calendar day.
 - **Known limitation:** this is consistent only when the report viewer's timezone matches the restaurant branch timezone. Before supporting branches across time zones or users viewing reports while travelling, add a validated `branches.time_zone` field (backfill the current India deployment to `Asia/Kolkata`) and compute both UTC query bounds and daily buckets in that branch timezone. Do not silently treat browser timezone as branch timezone.
 - For the current India-only rollout, acceptance must confirm branch operators use `Asia/Kolkata`; multi-timezone reporting remains a release gate before expanding geography.
+
+## Daily implementation update (2026-11-11)
+- Added `report-date-time.mjs` with IANA-timezone date keys, calendar-day arithmetic, branch-local midnight-to-UTC conversion, and 7/30/90-day report windows. The current India rollout explicitly uses `Asia/Kolkata`.
+- Reports queries now begin at midnight in the configured report timezone, and daily sales buckets and recent-order display use the same timezone instead of the viewer's browser timezone.
+- Added regression tests for India midnight attribution, UTC query-window boundaries, invalid timezone identifiers, leap day and year transition.
+- The branches table currently has no timezone column. Before multi-timezone rollout, add a validated branch-level IANA timezone field and load it into report queries; do not infer branch timezone from the manager's device.
+- Staging RLS, pagination, financial reconciliation and EXPLAIN/ANALYZE remain release gates.
