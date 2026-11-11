@@ -161,9 +161,15 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - Added `report-date-time.mjs` with IANA-timezone date keys, calendar-day arithmetic, branch-local midnight-to-UTC conversion, and 7/30/90-day report windows. The current India rollout explicitly uses `Asia/Kolkata`.
 - Reports queries now begin at midnight in the configured report timezone, and daily sales buckets and recent-order display use the same timezone instead of the viewer's browser timezone.
 - Added regression tests for India midnight attribution, UTC query-window boundaries, invalid timezone identifiers, leap day and year transition.
-- The branches table currently has no timezone column. Before multi-timezone rollout, add a validated branch-level IANA timezone field and load it into report queries; do not infer branch timezone from the manager's device.
+- Live schema inspection found `companies.timezone` already exists (default `Asia/Kolkata`) and `branches.company_id` references `companies.id`. Reports now load the selected branch's company timezone through the nested relation. If branches under one company later need different timezones, add a validated branch-level override; never infer timezone from the manager's device.
 - Staging RLS, pagination, financial reconciliation and EXPLAIN/ANALYZE remain release gates.
 
 ### CI correction follow-up
 - The first timezone-utility CI attempt exposed an over-escaped date-key regular expression. Corrected both YYYY-MM-DD validators in `report-date-time.mjs` in commit `eb8a2016c6d5c149e854da59c1fa7ceb254e4190`.
 - The earlier failed workflow ran before that correction and is not evidence against the corrected head; the next PR-head workflow must pass before this change is treated as code-verified.
+
+
+### Company-timezone integration
+- The report page now selects `branches(...,companies(timezone))` for each active membership and resolves object/array relation shapes.
+- Missing company timezone falls back to `Asia/Kolkata`; an invalid configured IANA timezone fails visibly instead of silently shifting report totals.
+- Added unit coverage for object, array, null and invalid company-timezone values.
