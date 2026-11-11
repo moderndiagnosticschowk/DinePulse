@@ -69,3 +69,9 @@ GitHub Actions proves SQL statement parsing, unit checks where configured, TypeS
 
 ## Daily implementation update (2026-11-11)
 - Phase 12 (2026-11-11): report query boundaries, daily sales buckets and recent-order display now use `Asia/Kolkata` through a reusable IANA-timezone utility, independent of the browser timezone. Added tests for midnight attribution, UTC boundaries, invalid zones, leap day and year boundary. Branch-level timezone persistence remains a pre-multi-timezone requirement because the current `branches` table has no timezone column.
+
+
+### Daily implementation update (2026-11-11 — timezone schema correction)
+- Read-only Supabase schema inspection found that `companies.timezone` already exists with default `Asia/Kolkata`, and `branches.company_id` references `companies.id`. The report page now loads the selected branch's related company timezone rather than relying on a hardcoded India timezone or browser timezone.
+- Added object/array/null/invalid company-timezone resolution tests. Branch-specific timezone overrides remain a future schema enhancement only if branches under the same company need different timezones.
+- The first timezone CI run failed because the new date-key regex was over-escaped; that was corrected, and the latest head is being revalidated. Do not treat the earlier failed run as the final result.
