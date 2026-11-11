@@ -76,6 +76,9 @@ $$;
 
 -- This function did not exist in the inspected live schema. Create it with the
 -- exact contract already used by apps/api/src/routes/inventory.ts.
+alter table public.purchases
+  add column if not exists idempotency_payload_hash text;
+
 create or replace function public.create_purchase(
   p_branch_id uuid,
   p_user_id uuid,
@@ -102,6 +105,8 @@ declare
   v_line_tax numeric(12,2);
   v_subtotal numeric(12,2) := 0;
   v_tax numeric(12,2) := coalesce(p_tax_amount, 0);
+  v_idempotency_key text := nullif(trim(p_idempotency_key), '');
+  v_payload_hash text;
 begin
   if auth.uid() is null then
     raise exception 'Authentication required' using errcode = '42501';
@@ -124,12 +129,43 @@ begin
     raise exception 'Supplier not found in this branch';
   end if;
 
-  if p_idempotency_key is not null then
+  if p_idempotency_key is not null
+    and (v_idempotency_key is null or length(v_idempotency_key) < 8 or length(v_idempotency_key) > 100) then
+    raise exception 'A valid purchase idempotency key is required';
+  end if;
+
+  -- Bind each idempotency key to a canonical request fingerprint. Sort line
+  -- items so harmless JSON array ordering differences do not change the request.
+  select md5(jsonb_build_object(
+    'branch_id', p_branch_id,
+    'supplier_id', p_supplier_id,
+    'invoice_number', nullif(trim(p_invoice_number), ''),
+    'purchase_date', coalesce(p_purchase_date, current_date),
+    'tax_amount', coalesce(p_tax_amount, 0),
+    'payment_status', coalesce(p_payment_status, 'PENDING'),
+    'paid_amount', coalesce(p_paid_amount, 0),
+    'notes', p_notes,
+    'items', (
+      select coalesce(jsonb_agg(item order by
+        item->>'inventory_item_id',
+        item->>'quantity',
+        item->>'unit_cost',
+        coalesce(item->>'tax_amount', '0')
+      ), '[]'::jsonb)
+      from jsonb_array_elements(p_items) as line(item)
+    )
+  )::text) into v_payload_hash;
+
+  if v_idempotency_key is not null then
     select * into v_purchase
     from public.purchases
-    where branch_id = p_branch_id and idempotency_key = p_idempotency_key
+    where branch_id = p_branch_id and idempotency_key = v_idempotency_key
     for update;
     if found then
+      if v_purchase.idempotency_payload_hash is distinct from v_payload_hash then
+        raise exception 'Purchase idempotency key was reused with different details'
+          using errcode = '22023';
+      end if;
       return jsonb_build_object('purchase', to_jsonb(v_purchase), 'duplicate', true);
     end if;
   end if;
@@ -155,13 +191,16 @@ begin
   begin
     insert into public.purchases(
       branch_id, supplier_id, invoice_number, purchase_date, subtotal, tax_amount,
-      total_amount, payment_status, paid_amount, notes, created_by, idempotency_key, status
+      total_amount, payment_status, paid_amount, notes, created_by, idempotency_key,
+      idempotency_payload_hash, status
     )
     values (
       p_branch_id, p_supplier_id, nullif(trim(p_invoice_number), ''),
       coalesce(p_purchase_date, current_date), v_subtotal, v_tax, v_subtotal + v_tax,
       coalesce(p_payment_status, 'PENDING'), coalesce(p_paid_amount, 0), p_notes,
-      auth.uid(), p_idempotency_key, 'DRAFT'
+      auth.uid(), v_idempotency_key,
+      case when v_idempotency_key is null then null else v_payload_hash end,
+      'DRAFT'
     )
     returning * into v_purchase;
   exception when unique_violation then
@@ -170,8 +209,12 @@ begin
     if p_idempotency_key is not null then
       select * into v_purchase
       from public.purchases
-      where branch_id = p_branch_id and idempotency_key = p_idempotency_key;
+      where branch_id = p_branch_id and idempotency_key = v_idempotency_key;
       if found then
+        if v_purchase.idempotency_payload_hash is distinct from v_payload_hash then
+          raise exception 'Purchase idempotency key was reused with different details'
+            using errcode = '22023';
+        end if;
         return jsonb_build_object('purchase', to_jsonb(v_purchase), 'duplicate', true);
       end if;
     end if;
