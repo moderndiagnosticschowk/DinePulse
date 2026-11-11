@@ -68,3 +68,6 @@ GitHub Actions proves SQL statement parsing, unit checks where configured, TypeS
 - Production Supabase still has only the original two migration-history entries, no development branches, and zero rows in orders/order_items/payments/purchases/stock_movements. Migration 0011/0012 have not been applied. No production DDL or deployment was performed.
 - Latest completed CI before today's changes was Phase 11 run #276 and Phase 12 run #272. The 2026-11-09 commits require fresh workflows; do not carry forward old green results to new heads.
 - The staging database remains unavailable. Supabase branch creation can incur compute charges and requires cost review/approval before creating one.
+
+## Daily implementation update (2026-11-11)
+- Phase 11 (2026-11-11): bound purchase idempotency keys to a canonical request fingerprint in `purchases.idempotency_payload_hash`; both normal retries and unique-violation race recovery reject changed payloads. SQL contract assertions added. Updated code/test head passed GitHub Actions run #303; PostgreSQL runtime behavior remains unverified pending staging.
