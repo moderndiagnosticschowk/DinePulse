@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { buildDailySales, buildPaymentMix, buildTopItems } from './report-aggregations.mjs';
+import { DEFAULT_REPORT_TIME_ZONE, getReportWindow, getZonedDateKey } from './report-date-time.mjs';
 
 test('builds zero-filled local-day buckets and sums paid_at amounts in integer paise', () => {
   const now = new Date(2026, 10, 8, 12, 0, 0);
@@ -112,4 +113,36 @@ test('keeps calendar buckets continuous across leap day and year boundaries', ()
   assert.equal(yearResult.length, 7);
   assert.equal(yearResult.at(-3).sales, 31);
   assert.equal(yearResult.at(-2).sales, 1);
+});
+
+
+test('report windows and daily buckets use Asia/Kolkata, not the browser timezone', () => {
+  const now = new Date('2026-11-10T20:00:00.000Z'); // 11 Nov, 01:30 in India
+  assert.equal(DEFAULT_REPORT_TIME_ZONE, 'Asia/Kolkata');
+  assert.equal(getZonedDateKey(now), '2026-11-11');
+
+  const window = getReportWindow(now, 7);
+  assert.equal(window.startDateKey, '2026-11-05');
+  assert.equal(window.from.toISOString(), '2026-11-04T18:30:00.000Z');
+  assert.equal(window.to.toISOString(), now.toISOString());
+});
+
+test('attributes payments on either side of India midnight to the correct branch day', () => {
+  const now = new Date('2026-11-11T00:15:00.000Z');
+  const result = buildDailySales([
+    { status: 'PAID', paid_at: '2026-11-10T18:29:59.999Z', grand_total: '10.00' },
+    { status: 'PAID', paid_at: '2026-11-10T18:30:00.000Z', grand_total: '20.00' },
+  ], 7, now, 'Asia/Kolkata');
+
+  assert.equal(result.at(-2).sales, 10);
+  assert.equal(result.at(-2).orders, 1);
+  assert.equal(result.at(-1).sales, 20);
+  assert.equal(result.at(-1).orders, 1);
+});
+
+test('rejects invalid IANA timezone identifiers for report windows', () => {
+  assert.throws(
+    () => getReportWindow(new Date('2026-11-11T00:00:00.000Z'), 7, 'Not/A_Timezone'),
+    RangeError,
+  );
 });
