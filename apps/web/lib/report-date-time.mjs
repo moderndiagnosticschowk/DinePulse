@@ -29,7 +29,7 @@ export function addCalendarDays(dateKey, amount) {
   if (!Number.isInteger(amount)) {
     throw new TypeError('Calendar-day offset must be an integer');
   }
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(dateKey);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
   if (!match) throw new TypeError('Date key must use YYYY-MM-DD');
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + amount));
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
@@ -38,7 +38,7 @@ export function addCalendarDays(dateKey, amount) {
 // Convert a branch-local midnight to its UTC instant without relying on the
 // browser's timezone. The current India rollout uses Asia/Kolkata (no DST).
 export function startOfZonedDay(dateKey, timeZone = DEFAULT_REPORT_TIME_ZONE) {
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(dateKey);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
   if (!match) throw new TypeError('Date key must use YYYY-MM-DD');
 
   const target = {
