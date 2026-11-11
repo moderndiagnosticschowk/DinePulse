@@ -173,3 +173,9 @@ Run migration 0012 and the expanded SQL preflight on a disposable schema-matched
 - The report page now selects `branches(...,companies(timezone))` for each active membership and resolves object/array relation shapes.
 - Missing company timezone falls back to `Asia/Kolkata`; an invalid configured IANA timezone fails visibly instead of silently shifting report totals.
 - Added unit coverage for object, array, null and invalid company-timezone values.
+
+
+### TypeScript and CI follow-up
+- Updated `report-aggregations.d.mts` for the optional report timezone argument and added `report-date-time.d.mts` declarations for the new date/time helpers.
+- Current automated suite contains 5 money tests and 11 report aggregation/timezone tests (16 total).
+- Workflow #321 confirmed all 15 tests present at that earlier commit passed, but TypeScript/build then failed because the new `.mjs` utility lacked declarations and the aggregation declaration lacked the fourth argument. Both declaration issues have been corrected; the newest PR-head workflow must verify the final 16-test/typecheck/build state.
