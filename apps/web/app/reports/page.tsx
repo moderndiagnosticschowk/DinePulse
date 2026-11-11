@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatINR, fromMinorUnits, toMinorUnits } from '@/lib/report-money.mjs';
 import { buildDailySales, buildPaymentMix, buildTopItems } from '@/lib/report-aggregations.mjs';
-import { DEFAULT_REPORT_TIME_ZONE, getReportWindow } from '@/lib/report-date-time.mjs';
+import { DEFAULT_REPORT_TIME_ZONE, getReportWindow, resolveReportTimeZone } from '@/lib/report-date-time.mjs';
 
 type OrderRow = {
   id: string;
@@ -18,7 +18,13 @@ type OrderRow = {
 };
 type ItemRow = { order_id: string; item_name: string; quantity: number | string; line_total: number | string };
 type PaymentRow = { order_id: string; payment_method: string; amount: number | string; status: string; paid_at: string | null };
-type BranchSummary = { id: string; name: string; code: string | null };
+type CompanySummary = { timezone: string | null };
+type BranchSummary = {
+  id: string;
+  name: string;
+  code: string | null;
+  companies: CompanySummary | CompanySummary[] | null;
+};
 type Membership = {
   branch_id: string;
   role: string;
@@ -29,7 +35,8 @@ type Membership = {
 
 const OPEN_ORDER_STATUSES = ['OPEN', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'SERVED'];
 
-function getBranchSummary(membership: Membership): BranchSummary | null {
+function getBranchSummary(membership?: Membership): BranchSummary | null {
+  if (!membership) return null;
   const relation = membership.branches;
   return Array.isArray(relation) ? relation[0] ?? null : relation;
 }
@@ -37,6 +44,7 @@ function getBranchSummary(membership: Membership): BranchSummary | null {
 export default function ReportsPage() {
   const [range, setRange] = useState<7 | 30 | 90>(7);
   const [reportNow, setReportNow] = useState(() => new Date());
+  const [reportTimeZone, setReportTimeZone] = useState(DEFAULT_REPORT_TIME_ZONE);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [salesOrders, setSalesOrders] = useState<OrderRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
@@ -60,7 +68,9 @@ export default function ReportsPage() {
     setOpenOrderCount(0);
     try {
       const reportNow = new Date();
-      const reportWindow = getReportWindow(reportNow, range, DEFAULT_REPORT_TIME_ZONE);
+      const selectedMembership = memberships.find(membership => membership.branch_id === branchId);
+      const reportTimeZone = resolveReportTimeZone(getBranchSummary(selectedMembership)?.companies);
+      const reportWindow = getReportWindow(reportNow, range, reportTimeZone);
       const fromIso = reportWindow.from.toISOString();
       const toIso = reportNow.toISOString();
       const pageSize = 500;
@@ -159,6 +169,7 @@ export default function ReportsPage() {
       setPayments(paymentRows);
       setOpenOrderCount(currentOpenOrderCount ?? 0);
       setReportNow(reportNow);
+      setReportTimeZone(reportTimeZone);
     } catch (e) {
       if (requestId === loadRequestRef.current) {
         setError(e instanceof Error ? e.message : 'Unable to load reports.');
@@ -166,7 +177,7 @@ export default function ReportsPage() {
     } finally {
       if (requestId === loadRequestRef.current) setLoading(false);
     }
-  }, [range, branchId]);
+  }, [range, branchId, memberships]);
 
   useEffect(() => {
     let active = true;
@@ -182,7 +193,7 @@ export default function ReportsPage() {
         }
         const { data, error: membershipError } = await supabase
           .from('branch_memberships')
-          .select('branch_id,role,branches(id,name,code)')
+          .select('branch_id,role,branches(id,name,code,companies(timezone))')
           .eq('user_id', session.user.id)
           .eq('is_active', true);
         if (membershipError) throw membershipError;
@@ -228,8 +239,8 @@ export default function ReportsPage() {
   const averageBill = paidOrders.length ? sales / paidOrders.length : 0;
 
   const daily = useMemo(
-    () => buildDailySales(paidOrders, range, reportNow, DEFAULT_REPORT_TIME_ZONE),
-    [paidOrders, range, reportNow],
+    () => buildDailySales(paidOrders, range, reportNow, reportTimeZone),
+    [paidOrders, range, reportNow, reportTimeZone],
   );
 
   const topItems = useMemo(() => buildTopItems(items), [items]);
@@ -247,7 +258,7 @@ export default function ReportsPage() {
           <div>
             <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-slate-950">← Dashboard</Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Reports & Analytics</h1>
-            <p className="mt-1 text-sm text-slate-500">Reports for {selectedBranchName ?? 'your selected branch'}: sales, trends, best sellers and payment mix · {DEFAULT_REPORT_TIME_ZONE}.</p>
+            <p className="mt-1 text-sm text-slate-500">Reports for {selectedBranchName ?? 'your selected branch'}: sales, trends, best sellers and payment mix · {reportTimeZone}.</p>
           </div>
           {memberships.length > 1 && (
             <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
@@ -331,7 +342,7 @@ export default function ReportsPage() {
 
             <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between gap-3 p-5"><div><h2 className="text-lg font-black">Recent orders</h2><p className="mt-1 text-sm text-slate-500">Latest orders in the selected period.</p></div><Link href="/orders" className="text-sm font-bold text-slate-600 hover:text-slate-950">All orders →</Link></div>
-              <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Date</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Total</th></tr></thead><tbody>{orders.slice(0, 12).map(order => <tr key={order.id} className="border-t border-slate-100"><td className="px-5 py-3 font-bold">#{order.order_number ?? order.id.slice(0, 8)}</td><td className="whitespace-nowrap px-5 py-3 text-slate-500">{new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: DEFAULT_REPORT_TIME_ZONE })}</td><td className="px-5 py-3">{order.order_type.replaceAll('_', ' ')}</td><td className="px-5 py-3"><span className={'rounded-full px-2.5 py-1 text-xs font-bold ' + (order.status === 'PAID' ? 'bg-emerald-100 text-emerald-800' : order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700')}>{order.status}</span></td><td className="px-5 py-3 text-right font-bold">{formatINR(Number(order.grand_total))}</td></tr>)}</tbody></table></div>
+              <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Date</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Total</th></tr></thead><tbody>{orders.slice(0, 12).map(order => <tr key={order.id} className="border-t border-slate-100"><td className="px-5 py-3 font-bold">#{order.order_number ?? order.id.slice(0, 8)}</td><td className="whitespace-nowrap px-5 py-3 text-slate-500">{new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: reportTimeZone })}</td><td className="px-5 py-3">{order.order_type.replaceAll('_', ' ')}</td><td className="px-5 py-3"><span className={'rounded-full px-2.5 py-1 text-xs font-bold ' + (order.status === 'PAID' ? 'bg-emerald-100 text-emerald-800' : order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700')}>{order.status}</span></td><td className="px-5 py-3 text-right font-bold">{formatINR(Number(order.grand_total))}</td></tr>)}</tbody></table></div>
             </section>
           </>
         )}
