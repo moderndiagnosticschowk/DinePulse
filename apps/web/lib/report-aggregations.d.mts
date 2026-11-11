@@ -20,7 +20,8 @@ export type PaymentMixEntry = [method: string, amount: number];
 export function buildDailySales(
   paidOrders: ReportOrder[],
   range: 7 | 30 | 90,
-  now?: Date
+  now?: Date,
+  timeZone?: string
 ): DailySalesPoint[];
 export function buildTopItems(items: ReportItem[], limit?: number): TopItem[];
 export function buildPaymentMix(payments: ReportPayment[]): PaymentMixEntry[];
